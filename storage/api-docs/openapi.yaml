@@ -1,0 +1,483 @@
+openapi: 3.0.0
+
+info:
+  title: Auth API
+  description: Admin & Student authentication APIs (Laravel Passport)
+  version: 1.0.0
+
+servers:
+  - url: http://192.168.0.142:8000/api
+
+components:
+  securitySchemes:
+    passport:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Admin:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+
+    Student:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+
+    AdminAuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        admin:
+          $ref: '#/components/schemas/Admin'
+
+    StudentAuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: '#/components/schemas/Student'
+
+paths:
+
+  /admin/register:
+    post:
+      tags: [Admin Auth]
+      summary: Register admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '201':
+          description: Admin created
+
+  /admin/login:
+    post:
+      tags: [Admin Auth]
+      summary: Login admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Invalid credentials
+
+  /admin/me:
+    get:
+      tags: [Admin Auth]
+      summary: Get logged-in admin
+      security:
+        - passport: []
+      responses:
+        '200':
+          description: Admin profile
+        '401':
+          description: Unauthenticated
+
+  /admin/logout:
+    post:
+      tags: [Admin Auth]
+      summary: Logout admin
+      security:
+        - passport: []
+      responses:
+        '200':
+          description: Logged out
+
+  /admin/assessments:
+    get:
+      tags: [Admin Assessments]
+      summary: Get all assessments
+      security:
+        - passport: []
+      responses:
+        200:
+          description: List of assessments
+
+    post:
+      tags: [Admin Assessments]
+      summary: Create assessment
+      security:
+        - passport: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assessment_type_id, title]
+              properties:
+                assessment_type_id:
+                  type: integer
+                title:
+                  type: string
+                description:
+                  type: string
+                publish_date:
+                  type: string
+                start_time:
+                  type: string
+                end_time:
+                  type: string
+                shuffle:
+                  type: boolean
+                is_library:
+                  type: boolean
+                is_active:
+                  type: boolean
+      responses:
+        201:
+          description: Assessment created
+
+  /admin/assessments/{id}:
+    get:
+      tags: [Admin Assessments]
+      summary: Get assessment
+      security:
+        - passport: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Assessment details
+
+    put:
+      tags: [Admin Assessments]
+      summary: Update assessment
+      security:
+        - passport: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                assessment_type_id:
+                  type: integer
+                  example: 1
+                title:
+                  type: string
+                  example: Math Test
+                description:
+                  type: string
+                  example: Final exam
+                publish_date:
+                  type: string
+                  example: "2026-01-30"
+                start_time:
+                  type: string
+                  example: "10:00:00"
+                end_time:
+                  type: string
+                  example: "11:00:00"
+                shuffle:
+                  type: boolean
+                  example: true
+                is_library:
+                  type: boolean
+                  example: false
+                is_active:
+                  type: boolean
+                  example: true
+      responses:
+        200:
+          description: Assessment updated
+
+    delete:
+      tags: [Admin Assessments]
+      summary: Delete assessment
+      security:
+        - passport: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Assessment deleted
+
+  /admin/assessments/library:
+    get:
+      tags: [Admin Assessments]
+      summary: Get library assessments
+      security:
+        - passport: []
+      responses:
+        200:
+          description: List of library assessments
+  
+  /admin/assessments/upcoming:
+    get:
+      tags: [Admin Assessments]
+      summary: Get upcoming assessments (today, not started yet)
+      security:
+        - passport: []
+      responses:
+        200:
+          description: List of upcoming assessments
+
+  /admin/assessments/running:
+    get:
+      tags: [Admin Assessments]
+      summary: Get currently running assessments
+      security:
+        - passport: []
+      responses:
+        200:
+          description: List of running assessments
+
+  /admin/assignments:
+    get:
+      tags: [Admin Assignments]
+      summary: Get assignments
+      security:
+        - passport: []
+      responses:
+        200:
+          description: List of assignments
+
+    post:
+      tags: [Admin Assignments]
+      summary: Assign assessment
+      security:
+        - passport: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assessment_id, user_id]
+              properties:
+                assessment_id:
+                  type: integer
+                user_id:
+                  type: integer
+      responses:
+        201:
+          description: Assignment created
+
+  /admin/assignments/{id}:
+    delete:
+      tags: [Admin Assignments]
+      summary: Remove assignment
+      security:
+        - passport: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Assignment removed
+
+  /admin/assessments/{assessmentId}/questions:
+    get:
+      tags: [Admin Questions]
+      summary: Get questions
+      security:
+        - passport: []
+      parameters:
+        - name: assessmentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: List of questions
+
+    post:
+      tags: [Admin Questions]
+      summary: Create question
+      security:
+        - passport: []
+      parameters:
+        - name: assessmentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        201:
+          description: Question created
+
+  /admin/questions/{id}:
+    put:
+      tags: [Admin Questions]
+      summary: Update question
+      security:
+        - passport: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Question updated
+
+    delete:
+      tags: [Admin Questions]
+      summary: Delete question
+      security:
+        - passport: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Question deleted
+
+  /admin/questions/{questionId}/choices:
+    get:
+      tags: [Admin Choices]
+      summary: Get choices
+      security:
+        - passport: []
+      parameters:
+        - name: questionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: List of choices
+
+    post:
+      tags: [Admin Choices]
+      summary: Create choice
+      security:
+        - passport: []
+      parameters:
+        - name: questionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        201:
+          description: Choice created
+
+  /admin/choices/{id}:
+    put:
+      tags: [Admin Choices]
+      summary: Update choice
+      security:
+        - passport: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Choice updated
+
+    delete:
+      tags: [Admin Choices]
+      summary: Delete choice
+      security:
+        - passport: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Choice deleted
+
+  /student/register:
+    post:
+      tags: [Student Auth]
+      summary: Register student
+      responses:
+        '201':
+          description: Student created
+
+  /student/login:
+    post:
+      tags: [Student Auth]
+      summary: Login student
+      responses:
+        '200':
+          description: Success
+
+  /student/me:
+    get:
+      tags: [Student Auth]
+      summary: Get logged-in student
+      security:
+        - passport: []
+      responses:
+        '200':
+          description: Student profile
+
+  /student/logout:
+    post:
+      tags: [Student Auth]
+      summary: Logout student
+      security:
+        - passport: []
+      responses:
+        '200':
+          description: Logged out
