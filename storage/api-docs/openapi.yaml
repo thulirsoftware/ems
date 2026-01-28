@@ -6,7 +6,7 @@ info:
   version: 1.0.0
 
 servers:
-  - url: http://192.168.0.142:8000/api
+  - url: https://seashell-okapi-169452.hostingersite.com/ems/public/api
 
 components:
   securitySchemes:
