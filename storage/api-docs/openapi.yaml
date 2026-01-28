@@ -2,12 +2,14 @@ openapi: 3.0.0
 
 info:
   title: Auth API
-  description: Admin & Student authentication APIs (Laravel Passport)
+  description: Admin & User authentication APIs (Laravel Passport)
   version: 1.0.0
 
 servers:
   - url: https://seashell-okapi-169452.hostingersite.com/ems/public/api
-  # - url: http://192.168.0.142:8000/api
+    description: Production
+  - url: http://192.168.0.142:8000/api
+    description: Local development
 
 components:
   securitySchemes:
@@ -27,7 +29,7 @@ components:
         email:
           type: string
 
-    Student:
+    User:
       type: object
       properties:
         id:
@@ -45,16 +47,16 @@ components:
         admin:
           $ref: '#/components/schemas/Admin'
 
-    StudentAuthResponse:
+    UserAuthResponse:
       type: object
       properties:
         token:
           type: string
         user:
-          $ref: '#/components/schemas/Student'
+          $ref: '#/components/schemas/User'
 
 paths:
-
+  # -------------------------------------------------------- Admin --------------------------------------------------------
   /admin/register:
     post:
       tags: [Admin Auth]
@@ -383,10 +385,14 @@ paths:
           application/json:
             schema:
               type: object
-              required: [assignment_ids]
+              required: [assessment_id, user_ids]
               properties:
-                assignment_ids:
+                assessment_id:
+                  type: integer
+                  example: 0
+                user_ids:
                   type: array
+                  minItems: 1
                   items:
                     type: integer
       responses:
@@ -402,14 +408,14 @@ paths:
                   deleted_count:
                     type: integer
 
-  /admin/assessments/{assessmentId}/questions:
+  /admin/assessments/{assessment_id}/questions:
     get:
       tags: [Admin Questions]
       summary: Get questions
       security:
         - passport: []
       parameters:
-        - name: assessmentId
+        - name: assessment_id
           in: path
           required: true
           schema:
@@ -417,6 +423,12 @@ paths:
       responses:
         200:
           description: List of questions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
 
     post:
       tags: [Admin Questions]
@@ -424,14 +436,32 @@ paths:
       security:
         - passport: []
       parameters:
-        - name: assessmentId
+        - name: assessment_id
           in: path
           required: true
           schema:
             type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, question_text]
+              properties:
+                type:
+                  type: string
+                question_text:
+                  type: string
+                order:
+                  type: integer
       responses:
         201:
           description: Question created
+          content:
+            application/json:
+              schema:
+                type: object
 
   /admin/questions/{id}:
     put:
@@ -445,9 +475,26 @@ paths:
           required: true
           schema:
             type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  type: string
+                question_text:
+                  type: string
+                order:
+                  type: integer
       responses:
         200:
           description: Question updated
+          content:
+            application/json:
+              schema:
+                type: object
 
     delete:
       tags: [Admin Questions]
@@ -463,15 +510,22 @@ paths:
       responses:
         200:
           description: Question deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
 
-  /admin/questions/{questionId}/choices:
+  /admin/questions/{question_id}/choices:
     get:
       tags: [Admin Choices]
       summary: Get choices
       security:
         - passport: []
       parameters:
-        - name: questionId
+        - name: question_id
           in: path
           required: true
           schema:
@@ -479,6 +533,12 @@ paths:
       responses:
         200:
           description: List of choices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
 
     post:
       tags: [Admin Choices]
@@ -486,14 +546,32 @@ paths:
       security:
         - passport: []
       parameters:
-        - name: questionId
+        - name: question_id
           in: path
           required: true
           schema:
             type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [option]
+              properties:
+                option:
+                  type: string
+                is_correct:
+                  type: boolean
+                order:
+                  type: integer
       responses:
         201:
           description: Choice created
+          content:
+            application/json:
+              schema:
+                type: object
 
   /admin/choices/{id}:
     put:
@@ -507,9 +585,26 @@ paths:
           required: true
           schema:
             type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                option:
+                  type: string
+                is_correct:
+                  type: boolean
+                order:
+                  type: integer
       responses:
         200:
           description: Choice updated
+          content:
+            application/json:
+              schema:
+                type: object
 
     delete:
       tags: [Admin Choices]
@@ -525,37 +620,74 @@ paths:
       responses:
         200:
           description: Choice deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
 
-  /student/register:
+
+  # -------------------------------------------------------- User --------------------------------------------------------
+  /user/register:
     post:
-      tags: [Student Auth]
-      summary: Register student
+      tags: [User Auth]
+      summary: Register user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                password:
+                  type: string
+
       responses:
         '201':
-          description: Student created
+          description: User created
 
-  /student/login:
+  /user/login:
     post:
-      tags: [Student Auth]
-      summary: Login student
+      tags: [User Auth]
+      summary: Login user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+
       responses:
         '200':
           description: Success
 
-  /student/me:
+  /user/me:
     get:
-      tags: [Student Auth]
-      summary: Get logged-in student
+      tags: [User Auth]
+      summary: Get logged-in user
       security:
         - passport: []
       responses:
         '200':
-          description: Student profile
+          description: User profile
 
-  /student/logout:
+  /user/logout:
     post:
-      tags: [Student Auth]
-      summary: Logout student
+      tags: [User Auth]
+      summary: Logout user
       security:
         - passport: []
       responses:

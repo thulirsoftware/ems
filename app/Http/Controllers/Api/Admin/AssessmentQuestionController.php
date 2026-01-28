@@ -9,26 +9,26 @@ use Illuminate\Http\Request;
 
 class AssessmentQuestionController extends Controller
 {
-    public function index(Request $request, $assessmentId)
+    public function index(Request $request, $assessment_id)
     {
         $admin = $request->user('admins');
 
-        Assessment::where('id', $assessmentId)
+        Assessment::where('id', $assessment_id)
             ->where('admin_id', $admin->id)
             ->firstOrFail();
 
-        $questions = AssessmentQuestion::where('assessment_id', $assessmentId)
+        $questions = AssessmentQuestion::where('assessment_id', $assessment_id)
             ->orderBy('order')
             ->get();
 
         return response()->json($questions);
     }
 
-    public function store(Request $request, $assessmentId)
+    public function store(Request $request, $assessment_id)
     {
         $admin = $request->user('admins');
 
-        Assessment::where('id', $assessmentId)
+        Assessment::where('id', $assessment_id)
             ->where('admin_id', $admin->id)
             ->firstOrFail();
 
@@ -39,7 +39,7 @@ class AssessmentQuestionController extends Controller
         ]);
 
         $question = AssessmentQuestion::create([
-            'assessment_id' => $assessmentId,
+            'assessment_id' => $assessment_id,
             ...$validated,
         ]);
 

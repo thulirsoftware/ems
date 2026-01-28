@@ -17,11 +17,6 @@ class AssessmentAttempt extends Model
         'score',
     ];
 
-    protected $casts = [
-        'started_at' => 'datetime',
-        'submitted_at' => 'datetime',
-    ];
-
     protected $hidden = [
         'deleted_at',
         'created_at',

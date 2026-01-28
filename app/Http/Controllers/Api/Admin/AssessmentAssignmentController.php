@@ -72,18 +72,21 @@ class AssessmentAssignmentController extends Controller
         $admin = $request->user('admins');
 
         $validated = $request->validate([
-            'assignment_ids' => 'required|array|min:1',
-            'assignment_ids.*' => 'exists:assessment_assignments,id',
+            'assessment_id' => 'required|exists:assessments,id',
+            'user_ids' => 'required|array|min:1',
+            'user_ids.*' => 'exists:users,id',
         ]);
 
-        $deleted = AssessmentAssignment::whereIn('id', $validated['assignment_ids'])
-            ->whereHas('assessment', function ($q) use ($admin) {
-                $q->where('admin_id', $admin->id);
-            })
+        Assessment::where('id', $validated['assessment_id'])
+            ->where('admin_id', $admin->id)
+            ->firstOrFail();
+
+        $deleted = AssessmentAssignment::where('assessment_id', $validated['assessment_id'])
+            ->whereIn('user_id', $validated['user_ids'])
             ->delete();
 
         return response()->json([
-            'message' => 'Assignments removed successfully',
+            'message' => 'Users unassigned successfully',
             'deleted_count' => $deleted,
         ]);
     }

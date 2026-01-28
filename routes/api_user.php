@@ -3,7 +3,7 @@
 use App\Http\Controllers\Api\User\UserAuthController;
 
 // Auth
-Route::prefix('student')->group(function () {
+Route::prefix('user')->group(function () {
     Route::post('register', [UserAuthController::class, 'register']);
     Route::post('login', [UserAuthController::class, 'login']);
 
