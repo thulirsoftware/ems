@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\Admin\AdminAuthController;
+use App\Http\Controllers\Api\Admin\AdminUserController;
 use App\Http\Controllers\Api\Admin\AssessmentController;
 use App\Http\Controllers\Api\Admin\AssessmentAssignmentController;
 use App\Http\Controllers\Api\Admin\AssessmentQuestionController;
@@ -14,14 +15,19 @@ Route::prefix('admin')->group(function () {
     Route::middleware('admin')->group(function () {
         Route::get('me', fn() => auth('admins')->user());
         Route::post('logout', [AdminAuthController::class, 'logout']);
+        
     });
+});
+
+// Users
+Route::prefix('admin')->middleware('admin')->group(function () {
+    Route::get('users', [AdminUserController::class, 'index']);
 });
 
 // Assessments
 Route::prefix('admin')->middleware('admin')->group(function () {
 
     // assessments
-
     Route::get('assessments', [AssessmentController::class, 'index']);
     Route::get('assessments/library', [AssessmentController::class, 'library']);
     Route::get('assessments/upcoming', [AssessmentController::class, 'upcoming']);
@@ -32,9 +38,9 @@ Route::prefix('admin')->middleware('admin')->group(function () {
     Route::delete('assessments/{id}', [AssessmentController::class, 'destroy']);
 
     // assignments
-    Route::get('assignments', [AssessmentAssignmentController::class, 'index']);
+    Route::get('assignments/users-with-assignment-status', [AssessmentAssignmentController::class, 'usersWithAssignmentStatus']);
     Route::post('assignments', [AssessmentAssignmentController::class, 'store']);
-    Route::delete('assignments/{id}', [AssessmentAssignmentController::class, 'destroy']);
+    Route::delete('assignments', [AssessmentAssignmentController::class, 'destroy']);
 
     // questions
     Route::get('assessments/{assessmentId}/questions', [AssessmentQuestionController::class, 'index']);

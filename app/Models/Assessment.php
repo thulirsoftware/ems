@@ -22,6 +22,11 @@ class Assessment extends Model
         'is_library',
     ];
 
+    protected $hidden = [
+        'deleted_at',
+        'created_at',
+        'updated_at',
+    ];
 
     // relationships
     public function admin()

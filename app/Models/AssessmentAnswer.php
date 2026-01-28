@@ -20,6 +20,12 @@ class AssessmentAnswer extends Model
         'answer' => 'array',
     ];
 
+    protected $hidden = [
+        'deleted_at',
+        'created_at',
+        'updated_at',
+    ];
+
     public function attempt()
     {
         return $this->belongsTo(AssessmentAttempt::class, 'attempt_id');

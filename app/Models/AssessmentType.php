@@ -16,6 +16,12 @@ class AssessmentType extends Model
         'is_active',
     ];
 
+    protected $hidden = [
+        'deleted_at',
+        'created_at',
+        'updated_at',
+    ];
+
     public function assessments()
     {
         return $this->hasMany(Assessment::class);

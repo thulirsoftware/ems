@@ -16,6 +16,12 @@ class AssessmentChoice extends Model
         'order',
     ];
 
+    protected $hidden = [
+        'deleted_at',
+        'created_at',
+        'updated_at',
+    ];
+
     public function question()
     {
         return $this->belongsTo(AssessmentQuestion::class, 'question_id');

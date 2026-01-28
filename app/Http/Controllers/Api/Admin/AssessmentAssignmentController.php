@@ -9,15 +9,33 @@ use Illuminate\Http\Request;
 
 class AssessmentAssignmentController extends Controller
 {
-    public function index(Request $request)
+    public function usersWithAssignmentStatus(Request $request)
     {
         $admin = $request->user('admins');
 
-        $assignments = AssessmentAssignment::whereHas('assessment', function ($q) use ($admin) {
-            $q->where('admin_id', $admin->id);
-        })->get();
+        $validated = $request->validate([
+            'assessment_id' => 'required|exists:assessments,id',
+        ]);
 
-        return response()->json($assignments);
+        Assessment::where('id', $validated['assessment_id'])
+            ->where('admin_id', $admin->id)
+            ->firstOrFail();
+
+        $assignedUserIds = AssessmentAssignment::where('assessment_id', $validated['assessment_id'])
+            ->pluck('user_id')
+            ->toArray();
+
+        $users = \App\Models\User::select('id', 'name')
+            ->get()
+            ->map(function ($user) use ($assignedUserIds) {
+                return [
+                    'user_id' => $user->id,
+                    'name' => $user->name,
+                    'assigned' => in_array($user->id, $assignedUserIds),
+                ];
+            });
+
+        return response()->json($users);
     }
 
     public function store(Request $request)
@@ -26,30 +44,47 @@ class AssessmentAssignmentController extends Controller
 
         $validated = $request->validate([
             'assessment_id' => 'required|exists:assessments,id',
-            'user_id' => 'required|exists:users,id',
+            'user_ids' => 'required|array|min:1',
+            'user_ids.*' => 'exists:users,id',
         ]);
 
         Assessment::where('id', $validated['assessment_id'])
             ->where('admin_id', $admin->id)
             ->firstOrFail();
 
-        $assignment = AssessmentAssignment::create($validated);
+        $assignments = [];
 
-        return response()->json($assignment, 201);
+        foreach ($validated['user_ids'] as $userId) {
+            $assignments[] = AssessmentAssignment::firstOrCreate([
+                'assessment_id' => $validated['assessment_id'],
+                'user_id' => $userId,
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Assessment assigned to students successfully',
+            'assignments' => $assignments,
+        ], 201);
     }
 
-    public function destroy(Request $request, $id)
+    public function destroy(Request $request)
     {
         $admin = $request->user('admins');
 
-        $assignment = AssessmentAssignment::whereHas('assessment', function ($q) use ($admin) {
-            $q->where('admin_id', $admin->id);
-        })->where('id', $id)->firstOrFail();
+        $validated = $request->validate([
+            'assignment_ids' => 'required|array|min:1',
+            'assignment_ids.*' => 'exists:assessment_assignments,id',
+        ]);
 
-        $assignment->delete();
+        $deleted = AssessmentAssignment::whereIn('id', $validated['assignment_ids'])
+            ->whereHas('assessment', function ($q) use ($admin) {
+                $q->where('admin_id', $admin->id);
+            })
+            ->delete();
 
         return response()->json([
-            'message' => 'Assignment removed'
+            'message' => 'Assignments removed successfully',
+            'deleted_count' => $deleted,
         ]);
     }
 }

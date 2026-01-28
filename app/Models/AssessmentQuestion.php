@@ -21,6 +21,12 @@ class AssessmentQuestion extends Model
         'config' => 'array',
     ];
 
+    protected $hidden = [
+        'deleted_at',
+        'created_at',
+        'updated_at',
+    ];
+
     public function assessment()
     {
         return $this->belongsTo(Assessment::class);

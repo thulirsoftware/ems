@@ -22,6 +22,12 @@ class AssessmentAttempt extends Model
         'submitted_at' => 'datetime',
     ];
 
+    protected $hidden = [
+        'deleted_at',
+        'created_at',
+        'updated_at',
+    ];
+
     public function assessment()
     {
         return $this->belongsTo(Assessment::class);
