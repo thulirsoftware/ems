@@ -107,8 +107,8 @@ class AssessmentController extends Controller
     {
         $admin = $request->user('admins');
 
-        $today = Carbon::now(config('app.timezone'))->toDateString();
-        $nowTime = Carbon::now(config('app.timezone'))->toTimeString();
+        $today = app_now()->toDateString();
+        $nowTime = app_now()->toTimeString();
 
         $assessments = Assessment::where('admin_id', $admin->id)
             ->where('is_active', true)
@@ -124,8 +124,8 @@ class AssessmentController extends Controller
     {
         $admin = $request->user('admins');
 
-        $today = Carbon::now(config('app.timezone'))->toDateString();
-        $nowTime = Carbon::now(config('app.timezone'))->toTimeString();
+        $today = app_now()->toDateString();
+        $nowTime = app_now()->toTimeString();
 
         $assessments = Assessment::where('admin_id', $admin->id)
             ->where('is_active', true)

@@ -6,12 +6,14 @@ use App\Http\Controllers\Api\Admin\AssessmentController;
 use App\Http\Controllers\Api\Admin\AssessmentAssignmentController;
 use App\Http\Controllers\Api\Admin\AssessmentQuestionController;
 use App\Http\Controllers\Api\Admin\AssessmentChoiceController;
+use App\Http\Controllers\Api\Admin\AssessmentTypeController;
 
 // Auth
 Route::prefix('admin')->group(function () {
     Route::post('register', [AdminAuthController::class, 'register']);
     Route::post('login', [AdminAuthController::class, 'login']);
 
+    // profile
     Route::middleware('admin')->group(function () {
         Route::get('me', fn() => auth('admins')->user());
         Route::post('logout', [AdminAuthController::class, 'logout']);
@@ -36,10 +38,12 @@ Route::prefix('admin')->middleware('admin')->group(function () {
     Route::put('assessments/{id}', [AssessmentController::class, 'update']);
     Route::delete('assessments/{id}', [AssessmentController::class, 'destroy']);
 
-    // assignments
-    Route::get('assignments/users-with-assignment-status', [AssessmentAssignmentController::class, 'usersWithAssignmentStatus']);
-    Route::post('assignments', [AssessmentAssignmentController::class, 'store']);
-    Route::delete('assignments', [AssessmentAssignmentController::class, 'destroy']);
+    // types
+    Route::get('assessment-types', [AssessmentTypeController::class, 'index']);
+    Route::post('assessment-types', [AssessmentTypeController::class, 'store']);
+    Route::get('assessment-types/{id}', [AssessmentTypeController::class, 'show']);
+    Route::put('assessment-types/{id}', [AssessmentTypeController::class, 'update']);
+    Route::delete('assessment-types/{id}', [AssessmentTypeController::class, 'destroy']);
 
     // questions
     Route::get('assessments/{assessment_id}/questions', [AssessmentQuestionController::class, 'index']);
@@ -52,4 +56,9 @@ Route::prefix('admin')->middleware('admin')->group(function () {
     Route::post('questions/{question_id}/choices', [AssessmentChoiceController::class, 'store']);
     Route::put('choices/{id}', [AssessmentChoiceController::class, 'update']);
     Route::delete('choices/{id}', [AssessmentChoiceController::class, 'destroy']);
+
+    // assignments
+    Route::get('assignments/users-with-assignment-status', [AssessmentAssignmentController::class, 'usersWithAssignmentStatus']);
+    Route::post('assignments', [AssessmentAssignmentController::class, 'store']);
+    Route::delete('assignments', [AssessmentAssignmentController::class, 'destroy']);
 });

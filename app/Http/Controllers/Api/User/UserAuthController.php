@@ -33,7 +33,7 @@ class UserAuthController extends Controller
     {
         $validated = $request->validate([
             'email' => 'required|email',
-            'password' => 'required|string',
+            'password' => 'required|string|min:8',
         ]);
 
         $user = User::where('email', $validated['email'])

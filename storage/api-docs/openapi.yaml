@@ -6,10 +6,10 @@ info:
   version: 1.0.0
 
 servers:
-  - url: https://seashell-okapi-169452.hostingersite.com/ems/public/api
-    description: Production
   - url: http://192.168.0.142:8000/api
     description: Local development
+  - url: https://seashell-okapi-169452.hostingersite.com/ems/public/api
+    description: Production
   - url: http://127.0.0.1:8000/api
     description: Localhost 
 
@@ -279,102 +279,93 @@ paths:
         200:
           description: List of running assessments
 
-  /admin/assignments/users-with-assignment-status:
+  /admin/assessment-types:
     get:
-      tags: [Admin Assignments]
-      summary: Get all users with assignment status for an assessment
+      tags: [Admin Assessment Types]
+      summary: List assessment types
+      responses:
+        '200':
+          description: List of assessment types
+
+    post:
+      tags: [Admin Assessment Types]
+      summary: Create assessment type
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, slug]
+              properties:
+                name:
+                  type: string
+                slug:
+                  type: string
+                description:
+                  type: string
+                is_active:
+                  type: boolean
+      responses:
+        '201':
+          description: Assessment type created
+
+  /admin/assessment-types/{id}:
+    get:
+      tags: [Admin Assessment Types]
+      summary: Get single assessment type
       parameters:
-        - name: assessment_id
-          in: query
+        - in: path
+          name: id
           required: true
           schema:
             type: integer
       responses:
-        200:
-          description: List of users with assignment status
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    user_id:
-                      type: integer
-                    name:
-                      type: string
-                    assigned:
-                      type: boolean
-        404:
-          description: Assessment not found or not owned by admin
-        422:
-          description: Validation error
+        '200':
+          description: Assessment type details
+        '404':
+          description: Not found
 
-
-  /admin/assignments:
-    post:
-      tags: [Admin Assignments]
-      summary: Assign assessment to multiple users
+    put:
+      tags: [Admin Assessment Types]
+      summary: Update assessment type
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [assessment_id, user_ids]
               properties:
-                assessment_id:
-                  type: integer
-                user_ids:
-                  type: array
-                  items:
-                    type: integer
+                name:
+                  type: string
+                slug:
+                  type: string
+                description:
+                  type: string
+                is_active:
+                  type: boolean
       responses:
-        201:
-          description: Assessment assigned successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                  assignments:
-                    type: array
-                    items:
-                      type: object
+        '200':
+          description: Assessment type updated
 
     delete:
-      tags: [Admin Assignments]
-      summary: Remove assessment assignments
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [assessment_id, user_ids]
-              properties:
-                assessment_id:
-                  type: integer
-                  example: 0
-                user_ids:
-                  type: array
-                  minItems: 1
-                  items:
-                    type: integer
+      tags: [Admin Assessment Types]
+      summary: Delete assessment type
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
       responses:
-        200:
-          description: Assignments removed successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                  deleted_count:
-                    type: integer
+        '200':
+          description: Assessment type deleted
 
   /admin/assessments/{assessment_id}/questions:
     get:
@@ -580,6 +571,103 @@ paths:
                   message:
                     type: string
 
+  /admin/assignments/users-with-assignment-status:
+    get:
+      tags: [Admin Assignments]
+      summary: Get all users with assignment status for an assessment
+      parameters:
+        - name: assessment_id
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: List of users with assignment status
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    user_id:
+                      type: integer
+                    name:
+                      type: string
+                    assigned:
+                      type: boolean
+        404:
+          description: Assessment not found or not owned by admin
+        422:
+          description: Validation error
+
+
+  /admin/assignments:
+    post:
+      tags: [Admin Assignments]
+      summary: Assign assessment to multiple users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assessment_id, user_ids]
+              properties:
+                assessment_id:
+                  type: integer
+                user_ids:
+                  type: array
+                  items:
+                    type: integer
+      responses:
+        201:
+          description: Assessment assigned successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  assignments:
+                    type: array
+                    items:
+                      type: object
+
+    delete:
+      tags: [Admin Assignments]
+      summary: Remove assessment assignments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assessment_id, user_ids]
+              properties:
+                assessment_id:
+                  type: integer
+                  example: 0
+                user_ids:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: integer
+      responses:
+        200:
+          description: Assignments removed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  deleted_count:
+                    type: integer
+
 
   # -------------------------------------------------------- User --------------------------------------------------------
   /user/register:
@@ -679,3 +767,165 @@ paths:
       responses:
         '200':
           description: Logged out
+
+  /user/assessments:
+    get:
+      tags: [User Assessments]
+      summary: List all assessments assigned to user
+      responses:
+        '200':
+          description: List of assessments
+
+  /user/assessments/upcoming:
+    get:
+      tags: [User Assessments]
+      summary: Get upcoming assessments (not started yet today)
+      responses:
+        '200':
+          description: List of upcoming assessments
+
+  /user/assessments/running:
+    get:
+      tags: [User Assessments]
+      summary: Get currently running assessments
+      responses:
+        '200':
+          description: List of running assessments
+
+  /user/assessments/{id}:
+    get:
+      tags: [User Assessments]
+      summary: Get single assessment (only if assigned)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Assessment details
+        '404':
+          description: Assessment not found or not assigned
+
+  /user/assessments/{id}/start:
+    post:
+      tags: [User Assessment Attempts]
+      summary: Start an assessment (create attempt)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '201':
+          description: Assessment started
+        '200':
+          description: Assessment already started
+        '403':
+          description: Assessment not currently available
+        '404':
+          description: Assessment not assigned or not found
+
+  /user/assessments/{id}/submit:
+    post:
+      tags: [User Assessment Attempts]
+      summary: Submit assessment and calculate result
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Assessment submitted successfully with score
+        '400':
+          description: Assessment already submitted
+        '404':
+          description: Attempt or assessment not found
+        '422':
+          description: Unsupported assessment type
+  
+  /user/assessments/{id}/result:
+    post:
+      tags: [User Assessment Results]
+      summary: Get assessment result with paginated questions
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+        - in: query
+          name: page
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: page_size
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Assessment result with score and question breakdown
+        '400':
+          description: Assessment not submitted yet
+        '404':
+          description: Attempt not found
+  
+  /user/assessments/{id}/questions:
+    get:
+      tags: [User Assessment Questions]
+      summary: Get assessment questions (only if started and running)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of questions with choices
+        '403':
+          description: Assessment is not currently running
+        '404':
+          description: Attempt not found or assessment not found
+  
+  /user/assessments/{id}/answer:
+    post:
+      tags: [User Assessment Answers]
+      summary: Save or update answer for a question (type-aware)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question_id, choice_id]
+              properties:
+                question_id:
+                  type: integer
+                choice_id:
+                  type: integer
+                answer:
+                  type: string
+      responses:
+        '200':
+          description: Answer saved
+        '403':
+          description: Assessment already submitted
+        '404':
+          description: Attempt, question, or choice not found
+        '422':
+          description: Unsupported assessment type
