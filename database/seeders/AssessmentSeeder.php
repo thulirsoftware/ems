@@ -16,7 +16,7 @@ class AssessmentSeeder extends Seeder
             'description' => 'Simple math assessment',
             'is_active' => true,
 
-            'publish_date' => now()->addDay()->toDateString(),
+            'publish_date' => app_now()->addDay()->toDateString(),
             'start_time' => '10:00:00',
             'end_time' => '12:00:00',
 

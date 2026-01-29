@@ -6,7 +6,10 @@ use App\Http\Controllers\Api\User\UserAuthController;
 Route::prefix('user')->group(function () {
     Route::post('register', [UserAuthController::class, 'register']);
     Route::post('login', [UserAuthController::class, 'login']);
+    Route::post('send-verification-code', [UserAuthController::class, 'sendVerificationCode']);
+    Route::post('verify-email', [UserAuthController::class, 'verifyEmail']);
 
+    // auth required
     Route::middleware('user')->group(function () {
         Route::get('me', fn() => auth('users')->user());
         Route::post('logout', [UserAuthController::class, 'logout']);

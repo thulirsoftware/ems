@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\CookieTokenAuth;
+use App\Http\Middleware\SlidingSession;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -17,6 +19,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'user' => ApiUserAuth::class,
             'admin' => ApiAdminAuth::class,
+        ]);
+
+        $middleware->appendToGroup('api', [
+            CookieTokenAuth::class
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

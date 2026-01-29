@@ -44,9 +44,16 @@ class AdminAuthController extends Controller
         $token = $admin->createToken('admin-token')->accessToken;
 
         return response()->json([
-            'token' => $token,
             'admin' => $admin,
-        ]);
+        ])->cookie(
+                'admin_access_token',
+                $token,
+                60 * 24 * 30, // 30 days
+                '/',
+                null,
+                false, // secure (true in prod)
+                true   // httpOnly
+            );
     }
 
     public function logout(Request $request)
@@ -55,6 +62,6 @@ class AdminAuthController extends Controller
 
         return response()->json([
             'message' => 'Logged out successfully'
-        ]);
+        ])->cookie('admin_access_token', '', -1);
     }
 }

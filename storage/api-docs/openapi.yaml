@@ -10,14 +10,10 @@ servers:
     description: Production
   - url: http://192.168.0.142:8000/api
     description: Local development
+  - url: http://127.0.0.1:8000/api
+    description: Localhost 
 
 components:
-  securitySchemes:
-    passport:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-
   schemas:
     Admin:
       type: object
@@ -105,8 +101,6 @@ paths:
     get:
       tags: [Admin Auth]
       summary: Get logged-in admin
-      security:
-        - passport: []
       responses:
         '200':
           description: Admin profile
@@ -117,8 +111,6 @@ paths:
     post:
       tags: [Admin Auth]
       summary: Logout admin
-      security:
-        - passport: []
       responses:
         '200':
           description: Logged out
@@ -128,8 +120,6 @@ paths:
       tags: [Admin Users]
       summary: Get all users
       description: Retrieve all users for admin view
-      security:
-        - passport: []
       responses:
         200:
           description: List of users
@@ -154,8 +144,6 @@ paths:
     get:
       tags: [Admin Assessments]
       summary: Get all assessments
-      security:
-        - passport: []
       responses:
         200:
           description: List of assessments
@@ -163,8 +151,6 @@ paths:
     post:
       tags: [Admin Assessments]
       summary: Create assessment
-      security:
-        - passport: []
       requestBody:
         required: true
         content:
@@ -199,8 +185,6 @@ paths:
     get:
       tags: [Admin Assessments]
       summary: Get assessment
-      security:
-        - passport: []
       parameters:
         - name: id
           in: path
@@ -214,8 +198,6 @@ paths:
     put:
       tags: [Admin Assessments]
       summary: Update assessment
-      security:
-        - passport: []
       parameters:
         - name: id
           in: path
@@ -263,8 +245,6 @@ paths:
     delete:
       tags: [Admin Assessments]
       summary: Delete assessment
-      security:
-        - passport: []
       parameters:
         - name: id
           in: path
@@ -279,8 +259,6 @@ paths:
     get:
       tags: [Admin Assessments]
       summary: Get library assessments
-      security:
-        - passport: []
       responses:
         200:
           description: List of library assessments
@@ -289,8 +267,6 @@ paths:
     get:
       tags: [Admin Assessments]
       summary: Get upcoming assessments (today, not started yet)
-      security:
-        - passport: []
       responses:
         200:
           description: List of upcoming assessments
@@ -299,8 +275,6 @@ paths:
     get:
       tags: [Admin Assessments]
       summary: Get currently running assessments
-      security:
-        - passport: []
       responses:
         200:
           description: List of running assessments
@@ -309,8 +283,6 @@ paths:
     get:
       tags: [Admin Assignments]
       summary: Get all users with assignment status for an assessment
-      security:
-        - passport: []
       parameters:
         - name: assessment_id
           in: query
@@ -343,8 +315,6 @@ paths:
     post:
       tags: [Admin Assignments]
       summary: Assign assessment to multiple users
-      security:
-        - passport: []
       requestBody:
         required: true
         content:
@@ -377,8 +347,6 @@ paths:
     delete:
       tags: [Admin Assignments]
       summary: Remove assessment assignments
-      security:
-        - passport: []
       requestBody:
         required: true
         content:
@@ -412,8 +380,6 @@ paths:
     get:
       tags: [Admin Questions]
       summary: Get questions
-      security:
-        - passport: []
       parameters:
         - name: assessment_id
           in: path
@@ -433,8 +399,6 @@ paths:
     post:
       tags: [Admin Questions]
       summary: Create question
-      security:
-        - passport: []
       parameters:
         - name: assessment_id
           in: path
@@ -467,8 +431,6 @@ paths:
     put:
       tags: [Admin Questions]
       summary: Update question
-      security:
-        - passport: []
       parameters:
         - name: id
           in: path
@@ -499,8 +461,6 @@ paths:
     delete:
       tags: [Admin Questions]
       summary: Delete question
-      security:
-        - passport: []
       parameters:
         - name: id
           in: path
@@ -522,8 +482,6 @@ paths:
     get:
       tags: [Admin Choices]
       summary: Get choices
-      security:
-        - passport: []
       parameters:
         - name: question_id
           in: path
@@ -543,8 +501,6 @@ paths:
     post:
       tags: [Admin Choices]
       summary: Create choice
-      security:
-        - passport: []
       parameters:
         - name: question_id
           in: path
@@ -577,8 +533,6 @@ paths:
     put:
       tags: [Admin Choices]
       summary: Update choice
-      security:
-        - passport: []
       parameters:
         - name: id
           in: path
@@ -609,8 +563,6 @@ paths:
     delete:
       tags: [Admin Choices]
       summary: Delete choice
-      security:
-        - passport: []
       parameters:
         - name: id
           in: path
@@ -653,6 +605,44 @@ paths:
         '201':
           description: User created
 
+  /user/send-verification-code:
+    post:
+      tags: [User Auth]
+      summary: Send email verification code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+      responses:
+        '200':
+          description: Verification code sent
+
+  /user/verify-email:
+    post:
+      tags: [User Auth]
+      summary: Verify email using OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code]
+              properties:
+                email:
+                  type: string
+                code:
+                  type: string
+      responses:
+        '200':
+          description: Email verified
+
   /user/login:
     post:
       tags: [User Auth]
@@ -678,8 +668,6 @@ paths:
     get:
       tags: [User Auth]
       summary: Get logged-in user
-      security:
-        - passport: []
       responses:
         '200':
           description: User profile
@@ -688,8 +676,6 @@ paths:
     post:
       tags: [User Auth]
       summary: Logout user
-      security:
-        - passport: []
       responses:
         '200':
           description: Logged out
