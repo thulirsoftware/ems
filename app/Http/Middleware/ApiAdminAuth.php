@@ -11,6 +11,8 @@ class ApiAdminAuth
 {
     public function handle(Request $request, Closure $next)
     {
+        app(CookieTokenAuth::class)->handle($request, fn($r) => $r);
+
         if (!Auth::guard('admins')->check()) {
             return response()->json([
                 'message' => 'Unauthenticated'

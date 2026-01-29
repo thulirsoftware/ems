@@ -20,10 +20,6 @@ return Application::configure(basePath: dirname(__DIR__))
             'user' => ApiUserAuth::class,
             'admin' => ApiAdminAuth::class,
         ]);
-
-        $middleware->appendToGroup('api', [
-            CookieTokenAuth::class
-        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
