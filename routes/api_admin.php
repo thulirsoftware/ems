@@ -6,13 +6,11 @@ use App\Http\Controllers\Api\Admin\AssessmentController;
 use App\Http\Controllers\Api\Admin\AssessmentAssignmentController;
 use App\Http\Controllers\Api\Admin\AssessmentQuestionController;
 use App\Http\Controllers\Api\Admin\AssessmentChoiceController;
-use App\Http\Controllers\Api\Admin\NewsletterController;
 
 // Auth
 Route::prefix('admin')->group(function () {
     Route::post('register', [AdminAuthController::class, 'register']);
     Route::post('login', [AdminAuthController::class, 'login']);
-    Route::post('/send-newsletter', [NewsletterController::class, 'sendNewsletter']);
 
     Route::middleware('admin')->group(function () {
         Route::get('me', fn() => auth('admins')->user());
