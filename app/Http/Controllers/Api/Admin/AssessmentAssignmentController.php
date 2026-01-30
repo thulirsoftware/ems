@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AssessmentAssignment;
 use App\Models\Assessment;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 
 class AssessmentAssignmentController extends Controller
@@ -17,9 +18,15 @@ class AssessmentAssignmentController extends Controller
             'assessment_id' => 'required|exists:assessments,id',
         ]);
 
-        Assessment::where('id', $validated['assessment_id'])
+        $assessment = Assessment::where('id', $validated['assessment_id'])
             ->where('admin_id', $admin->id)
-            ->firstOrFail();
+            ->first();
+
+        if (!$assessment) {
+            return response()->json([
+                'message' => 'Assessment not found or you do not have access'
+            ], 404);
+        }
 
         $assignedUserIds = AssessmentAssignment::where('assessment_id', $validated['assessment_id'])
             ->pluck('user_id')
@@ -48,17 +55,37 @@ class AssessmentAssignmentController extends Controller
             'user_ids.*' => 'exists:users,id',
         ]);
 
-        Assessment::where('id', $validated['assessment_id'])
+        $assessment = Assessment::where('id', $validated['assessment_id'])
             ->where('admin_id', $admin->id)
-            ->firstOrFail();
+            ->first();
+
+        if (!$assessment) {
+            return response()->json([
+                'message' => 'Assessment not found or you do not have access'
+            ], 404);
+        }
 
         $assignments = [];
 
         foreach ($validated['user_ids'] as $userId) {
-            $assignments[] = AssessmentAssignment::firstOrCreate([
+
+            $assignment = AssessmentAssignment::firstOrCreate([
                 'assessment_id' => $validated['assessment_id'],
                 'user_id' => $userId,
             ]);
+
+            NotificationService::notifyUser(
+                $userId,
+                'assessment_assigned',
+                'New assessment assigned',
+                "You have been assigned: {$assessment->title}",
+                [
+                    'assessment_id' => $assessment->id,
+                    'admin_id' => $admin->id
+                ]
+            );
+
+            $assignments[] = $assignment;
         }
 
         return response()->json([
@@ -77,9 +104,15 @@ class AssessmentAssignmentController extends Controller
             'user_ids.*' => 'exists:users,id',
         ]);
 
-        Assessment::where('id', $validated['assessment_id'])
+        $assessment = Assessment::where('id', $validated['assessment_id'])
             ->where('admin_id', $admin->id)
-            ->firstOrFail();
+            ->first();
+
+        if (!$assessment) {
+            return response()->json([
+                'message' => 'Assessment not found or you do not have access'
+            ], 404);
+        }
 
         $deleted = AssessmentAssignment::where('assessment_id', $validated['assessment_id'])
             ->whereIn('user_id', $validated['user_ids'])

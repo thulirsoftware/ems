@@ -71,7 +71,7 @@ class AssessmentAttemptController extends Controller
 
         $attempt = AssessmentAttempt::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)
-            ->with('answers')
+            ->with(['answers', 'assessment.type'])
             ->firstOrFail();
 
         if ($attempt->submitted_at) {
@@ -80,8 +80,7 @@ class AssessmentAttemptController extends Controller
             ], 400);
         }
 
-        $assessment = Assessment::with('type')->findOrFail($assessment_id);
-        $type = $assessment->type->slug;
+        $type = $attempt->assessment->type->slug;
 
         switch ($type) {
             case 'mcq':
@@ -109,14 +108,18 @@ class AssessmentAttemptController extends Controller
 
     private function evaluateMcq(AssessmentAttempt $attempt)
     {
-        $totalQuestions = $attempt->answers->count();
+        $assessment = $attempt->assessment;
+
+        $totalQuestions = $attempt->assessment->questions()->count();
         $correctCount = 0;
+        $wrongCount = 0;
 
         foreach ($attempt->answers as $answer) {
 
             $choiceId = $answer->answer['choice_id'] ?? null;
 
             if (!$choiceId) {
+                $wrongCount++;
                 $answer->update(['is_correct' => false]);
                 continue;
             }
@@ -127,15 +130,29 @@ class AssessmentAttemptController extends Controller
                 $correctCount++;
                 $answer->update(['is_correct' => true]);
             } else {
+                $wrongCount++;
                 $answer->update(['is_correct' => false]);
             }
         }
 
-        $score = $correctCount . '/' . $totalQuestions;
+        // Apply negative marking
+        if ($assessment->has_negative) {
+            $finalScoreValue = $correctCount - ($wrongCount * $assessment->negative_marks);
+        } else {
+            $finalScoreValue = $correctCount;
+        }
+
+        // Never allow negative total score
+        if ($finalScoreValue < 0) {
+            $finalScoreValue = 0;
+        }
+
+        $score = $finalScoreValue . '/' . $totalQuestions;
 
         return [
             'score' => $score,
             'correct' => $correctCount,
+            'wrong' => $wrongCount,
             'total' => $totalQuestions,
         ];
     }

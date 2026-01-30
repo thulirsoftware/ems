@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Assessment;
-use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class AssessmentController extends Controller
@@ -13,9 +12,26 @@ class AssessmentController extends Controller
     {
         $admin = $request->user('admins');
 
+        $today = app_now()->toDateString();
+        $nowTime = app_now()->toTimeString();
+
         $assessments = Assessment::where('admin_id', $admin->id)
             ->latest()
-            ->get();
+            ->get()
+            ->map(function ($assessment) use ($today, $nowTime) {
+
+                $isFinished =
+                    $assessment->publish_date < $today ||
+                    (
+                        $assessment->publish_date == $today &&
+                        $assessment->end_time < $nowTime
+                    );
+
+                return [
+                    ...$assessment->toArray(),
+                    'is_finished' => $isFinished
+                ];
+            });
 
         return response()->json($assessments);
     }
@@ -32,6 +48,8 @@ class AssessmentController extends Controller
             'shuffle' => 'boolean',
             'is_library' => 'boolean',
             'is_active' => 'boolean',
+            'has_negative' => 'boolean',
+            'negative_marks' => 'nullable|numeric|min:0',
         ]);
 
         $assessment = Assessment::create([
@@ -71,6 +89,8 @@ class AssessmentController extends Controller
             'shuffle' => 'boolean',
             'is_library' => 'boolean',
             'is_active' => 'boolean',
+            'has_negative' => 'boolean',
+            'negative_marks' => 'nullable|numeric|min:0',
         ]);
 
         $assessment->update($validated);

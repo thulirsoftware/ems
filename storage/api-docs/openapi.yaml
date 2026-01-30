@@ -6,11 +6,11 @@ info:
   version: 1.0.0
 
 servers:
-  - url: http://192.168.0.142:8000/api
+  - url: http://192.168.0.142:8000/api/v1
     description: Local development
-  - url: https://seashell-okapi-169452.hostingersite.com/ems/public/api
+  - url: https://seashell-okapi-169452.hostingersite.com/ems/public/api/v1
     description: Production
-  - url: http://127.0.0.1:8000/api
+  - url: http://127.0.0.1:8000/api/v1
     description: Localhost 
 
 components:
@@ -177,6 +177,10 @@ paths:
                   type: boolean
                 is_active:
                   type: boolean
+                has_negative:
+                  type: boolean
+                negative_marks:
+                  type: number
       responses:
         201:
           description: Assessment created
@@ -238,6 +242,12 @@ paths:
                 is_active:
                   type: boolean
                   example: true
+                has_negative:
+                  type: boolean
+                  example: true
+                negative_marks:
+                  type: number
+                  example: 0.5
       responses:
         200:
           description: Assessment updated
@@ -369,7 +379,7 @@ paths:
 
   /admin/assessments/{assessment_id}/questions:
     get:
-      tags: [Admin Questions]
+      tags: [Admin Assessment Questions]
       summary: Get questions
       parameters:
         - name: assessment_id
@@ -388,7 +398,7 @@ paths:
                   type: object
 
     post:
-      tags: [Admin Questions]
+      tags: [Admin Assessment Questions]
       summary: Create question
       parameters:
         - name: assessment_id
@@ -420,7 +430,7 @@ paths:
 
   /admin/questions/{id}:
     put:
-      tags: [Admin Questions]
+      tags: [Admin Assessment Questions]
       summary: Update question
       parameters:
         - name: id
@@ -450,7 +460,7 @@ paths:
                 type: object
 
     delete:
-      tags: [Admin Questions]
+      tags: [Admin Assessment Questions]
       summary: Delete question
       parameters:
         - name: id
@@ -471,7 +481,7 @@ paths:
 
   /admin/questions/{question_id}/choices:
     get:
-      tags: [Admin Choices]
+      tags: [Admin Assessment Choices]
       summary: Get choices
       parameters:
         - name: question_id
@@ -490,7 +500,7 @@ paths:
                   type: object
 
     post:
-      tags: [Admin Choices]
+      tags: [Admin Assessment Choices]
       summary: Create choice
       parameters:
         - name: question_id
@@ -522,7 +532,7 @@ paths:
 
   /admin/choices/{id}:
     put:
-      tags: [Admin Choices]
+      tags: [Admin Assessment Choices]
       summary: Update choice
       parameters:
         - name: id
@@ -552,7 +562,7 @@ paths:
                 type: object
 
     delete:
-      tags: [Admin Choices]
+      tags: [Admin Assessment Choices]
       summary: Delete choice
       parameters:
         - name: id
@@ -573,7 +583,7 @@ paths:
 
   /admin/assignments/users-with-assignment-status:
     get:
-      tags: [Admin Assignments]
+      tags: [Admin Assessment Assignments]
       summary: Get all users with assignment status for an assessment
       parameters:
         - name: assessment_id
@@ -605,7 +615,7 @@ paths:
 
   /admin/assignments:
     post:
-      tags: [Admin Assignments]
+      tags: [Admin Assessment Assignments]
       summary: Assign assessment to multiple users
       requestBody:
         required: true
@@ -637,7 +647,7 @@ paths:
                       type: object
 
     delete:
-      tags: [Admin Assignments]
+      tags: [Admin Assessment Assignments]
       summary: Remove assessment assignments
       requestBody:
         required: true
@@ -668,6 +678,48 @@ paths:
                   deleted_count:
                     type: integer
 
+  /admin/results/finished:
+    get:
+      tags: [Admin Assessment Results]
+      summary: Get finished assessments
+      responses:
+        200:
+          description: List of finished assessments
+
+  /admin/results/{assessment_id}/users:
+    get:
+      tags: [Admin Assessment Results]
+      summary: Get users assigned to an assessment with attempt status
+      parameters:
+        - name: assessment_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: List of users with attempted flag
+
+  /admin/results/{assessment_id}/user/{user_id}:
+    get:
+      tags: [Admin Assessment Results]
+      summary: Get result of a specific user for an assessment
+      parameters:
+        - name: assessment_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: User result details
+        400:
+          description: User has not submitted the assessment
 
   # -------------------------------------------------------- User --------------------------------------------------------
   /user/register:
@@ -929,3 +981,19 @@ paths:
           description: Attempt, question, or choice not found
         '422':
           description: Unsupported assessment type
+
+  /user/notifications:
+    get:
+      tags: [User Notifications]
+      summary: Get all notifications for logged-in user
+      responses:
+        200:
+          description: List of notifications
+
+  /user/notifications/read-all:
+    post:
+      tags: [User Notifications]
+      summary: Mark all notifications as read
+      responses:
+        200:
+          description: All notifications marked as read

@@ -20,6 +20,8 @@ class Assessment extends Model
         'end_time',
         'shuffle',
         'is_library',
+        'has_negative',
+        'negative_marks'
     ];
 
     protected $hidden = [
