@@ -54,6 +54,7 @@ class UserAuthController extends Controller
 
         return response()->json([
             'user' => $user,
+            'token' => $token
         ])->cookie(
                 'user_access_token',
                 $token,

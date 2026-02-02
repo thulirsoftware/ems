@@ -6,14 +6,23 @@ info:
   version: 1.0.0
 
 servers:
+  - url: http://192.168.0.142:8000/web/v1
+    description: Web (Cookies + CSRF)
   - url: http://192.168.0.142:8000/api/v1
-    description: Local development
+    description: Mobile apps (Bearer token)
+
+  - url: https://seashell-okapi-169452.hostingersite.com/ems/public/web/v1
+    description: Production Web
   - url: https://seashell-okapi-169452.hostingersite.com/ems/public/api/v1
-    description: Production
-  - url: http://127.0.0.1:8000/api/v1
-    description: Localhost 
+    description: Production Mobile
 
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
     Admin:
       type: object
@@ -51,9 +60,13 @@ components:
         user:
           $ref: '#/components/schemas/User'
 
+security:
+  - BearerAuth: []
+
 paths:
   # -------------------------------------------------------- Admin --------------------------------------------------------
   /admin/register:
+    security: []
     post:
       tags: [Admin Auth]
       summary: Register admin
@@ -76,6 +89,7 @@ paths:
           description: Admin created
 
   /admin/login:
+    security: []
     post:
       tags: [Admin Auth]
       summary: Login admin
@@ -723,6 +737,7 @@ paths:
 
   # -------------------------------------------------------- User --------------------------------------------------------
   /user/register:
+    security: []
     post:
       tags: [User Auth]
       summary: Register user
@@ -746,6 +761,7 @@ paths:
           description: User created
 
   /user/send-verification-code:
+    security: []
     post:
       tags: [User Auth]
       summary: Send email verification code
@@ -764,6 +780,7 @@ paths:
           description: Verification code sent
 
   /user/verify-email:
+    security: []
     post:
       tags: [User Auth]
       summary: Verify email using OTP
@@ -784,6 +801,7 @@ paths:
           description: Email verified
 
   /user/login:
+    security: []
     post:
       tags: [User Auth]
       summary: Login user

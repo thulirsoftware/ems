@@ -1,7 +1,11 @@
 <?php
 
-// use Illuminate\Support\Facades\Route;
+Route::prefix('web/v1')->middleware('web')->group(function () {
+    require __DIR__.'/api_shared.php';
+});
 
-// Route::get('/', function () {
-//     return view('welcome');
-// });
+Route::get('web/v1/csrf-token', function () {
+    return response()->json([
+        'token' => csrf_token()
+    ]);
+});

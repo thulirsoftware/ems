@@ -45,6 +45,7 @@ class AdminAuthController extends Controller
 
         return response()->json([
             'admin' => $admin,
+            'token' => $token
         ])->cookie(
                 'admin_access_token',
                 $token,

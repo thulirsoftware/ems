@@ -23,6 +23,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->appendToGroup('api', [
             ForceJsonResponse::class,
         ]);
+        $middleware->appendToGroup('web', [
+            ForceJsonResponse::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
 

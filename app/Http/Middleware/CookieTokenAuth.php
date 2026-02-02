@@ -10,7 +10,7 @@ class CookieTokenAuth
     {
         $path = $request->path();
 
-        if (str_starts_with($path, 'api/v1/admin')) {
+        if (str_starts_with($path, 'web/v1/admin')) {
             if ($request->cookie('admin_access_token')) {
                 $request->headers->set(
                     'Authorization',
@@ -19,7 +19,7 @@ class CookieTokenAuth
             }
         }
 
-        if (str_starts_with($path, 'api/v1/user')) {
+        if (str_starts_with($path, 'web/v1/user')) {
             if ($request->cookie('user_access_token')) {
                 $request->headers->set(
                     'Authorization',
