@@ -493,6 +493,98 @@ paths:
                   message:
                     type: string
 
+  /admin/assessments/{assessment_id}/questions/with-choices:
+    post:
+      tags: [Admin Assessment Questions]
+      summary: Create question with 4 choices
+      parameters:
+        - name: assessment_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, question_text, choices]
+              properties:
+                type:
+                  type: string
+                question_text:
+                  type: string
+                order:
+                  type: integer
+                choices:
+                  type: array
+                  minItems: 4
+                  maxItems: 4
+                  items:
+                    type: object
+                    required: [option, is_correct]
+                    properties:
+                      option:
+                        type: string
+                      is_correct:
+                        type: boolean
+                      order:
+                        type: integer
+      responses:
+        201:
+          description: Question with choices created
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /admin/questions/{id}/with-choices:
+    put:
+      tags: [Admin Assessment Questions]
+      summary: Update question with 4 choices
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, question_text, choices]
+              properties:
+                type:
+                  type: string
+                question_text:
+                  type: string
+                order:
+                  type: integer
+                choices:
+                  type: array
+                  minItems: 4
+                  maxItems: 4
+                  items:
+                    type: object
+                    required: [option, is_correct]
+                    properties:
+                      option:
+                        type: string
+                      is_correct:
+                        type: boolean
+                      order:
+                        type: integer
+      responses:
+        200:
+          description: Question with choices updated
+          content:
+            application/json:
+              schema:
+                type: object
+
   /admin/questions/{question_id}/choices:
     get:
       tags: [Admin Assessment Choices]

@@ -48,8 +48,10 @@ Route::prefix('admin')->middleware('admin')->group(function () {
 
     // Questions
     Route::get('assessments/{assessment_id}/questions', [AssessmentQuestionController::class, 'index']);
-    Route::post('assessments/{assessment_id}/questions', [AssessmentQuestionController::class, 'store']);
-    Route::put('questions/{id}', [AssessmentQuestionController::class, 'update']);
+    Route::post('assessments/{assessment_id}/questions', [AssessmentQuestionController::class, 'store']); 
+    Route::post('assessments/{assessment_id}/questions/with-choices', [AssessmentQuestionController::class, 'storeWithChoices']);
+    Route::put('questions/{id}', [AssessmentQuestionController::class, 'update']); 
+    Route::put('questions/{id}/with-choices', [AssessmentQuestionController::class, 'updateWithChoices']);
     Route::delete('questions/{id}', [AssessmentQuestionController::class, 'destroy']);
 
     // Choices
