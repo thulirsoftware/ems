@@ -2,7 +2,6 @@
 
 namespace App\Providers;
 
-use Carbon\CarbonInterval;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Passport\Passport;
 
