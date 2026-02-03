@@ -24,6 +24,7 @@ Route::prefix('admin')->group(function () {
 // Admin users
 Route::prefix('admin')->middleware('admin')->group(function () {
     Route::get('users', [AdminUserController::class, 'index']);
+    Route::post('users', [AdminUserController::class, 'store']);
 });
 
 // Admin assessments
