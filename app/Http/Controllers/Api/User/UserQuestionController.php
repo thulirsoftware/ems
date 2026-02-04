@@ -20,8 +20,8 @@ class UserQuestionController extends Controller
 
         $assessment = Assessment::findOrFail($assessment_id);
 
-        $today = now()->toDateString();
-        $nowTime = now()->toTimeString();
+        $today = app_now()->toDateString();
+        $nowTime = app_now()->toTimeString();
 
         if (
             $assessment->publish_date !== $today ||

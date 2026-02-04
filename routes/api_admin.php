@@ -42,10 +42,6 @@ Route::prefix('admin')->middleware('admin')->group(function () {
 
     // Assessment types
     Route::get('assessment-types', [AssessmentTypeController::class, 'index']);
-    Route::post('assessment-types', [AssessmentTypeController::class, 'store']);
-    Route::get('assessment-types/{id}', [AssessmentTypeController::class, 'show']);
-    Route::put('assessment-types/{id}', [AssessmentTypeController::class, 'update']);
-    Route::delete('assessment-types/{id}', [AssessmentTypeController::class, 'destroy']);
 
     // Questions
     Route::get('assessments/{assessment_id}/questions', [AssessmentQuestionController::class, 'index']);
