@@ -529,6 +529,24 @@ paths:
                     type: string
 
   /admin/assessments/{assessment_id}/questions/with-choices:
+    get:
+      tags: [Admin Assessment Questions]
+      summary: List questions with choices
+      parameters:
+        - name: assessment_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: List of questions with choices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
     post:
       tags: [Admin Assessment Questions]
       summary: Create question with 4 choices
@@ -574,7 +592,24 @@ paths:
               schema:
                 type: object
 
+
   /admin/questions/{id}/with-choices:
+    get:
+      tags: [Admin Assessment Questions]
+      summary: Get single question with choices
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Question with choices
+          content:
+            application/json:
+              schema:
+                type: object
     put:
       tags: [Admin Assessment Questions]
       summary: Update question with 4 choices
