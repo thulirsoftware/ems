@@ -34,11 +34,30 @@ class AssessmentAssignmentController extends Controller
 
         $users = \App\Models\User::select('id', 'name')
             ->get()
-            ->map(function ($user) use ($assignedUserIds) {
+            ->map(function ($user) use ($assignedUserIds, $assessment) {
+
+                $conflict = \DB::table('assessment_assignments as aa')
+                    ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
+                    ->where('aa.user_id', $user->id)
+                    ->where('a.id', '!=', $assessment->id)
+                    ->whereNotNull('a.publish_date')
+                    ->whereDate('a.publish_date', $assessment->publish_date)
+                    ->whereNotNull('a.start_time')
+                    ->whereNotNull('a.end_time')
+                    ->where(function ($q) use ($assessment) {
+                        $q->where('a.start_time', '<', $assessment->end_time)
+                            ->where('a.end_time', '>', $assessment->start_time);
+                    })
+                    ->select('a.id', 'a.title')
+                    ->first();
+
                 return [
                     'user_id' => $user->id,
                     'name' => $user->name,
                     'assigned' => in_array($user->id, $assignedUserIds),
+                    'has_time_conflict' => (bool) $conflict,
+                    'conflicting_assessment_id' => $conflict?->id,
+                    'conflicting_assessment_title' => $conflict?->title,
                 ];
             });
 
@@ -66,11 +85,37 @@ class AssessmentAssignmentController extends Controller
         }
 
         $assignments = [];
+        $conflicts = [];
 
         foreach ($validated['user_ids'] as $userId) {
 
+            // Check time conflict before assigning
+            $conflict = \DB::table('assessment_assignments as aa')
+                ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
+                ->where('aa.user_id', $userId)
+                ->where('a.id', '!=', $assessment->id)
+                ->whereNotNull('a.publish_date')
+                ->whereDate('a.publish_date', $assessment->publish_date)
+                ->whereNotNull('a.start_time')
+                ->whereNotNull('a.end_time')
+                ->where(function ($q) use ($assessment) {
+                    $q->where('a.start_time', '<', $assessment->end_time)
+                        ->where('a.end_time', '>', $assessment->start_time);
+                })
+                ->select('a.id', 'a.title')
+                ->first();
+
+            if ($conflict) {
+                $conflicts[] = [
+                    'user_id' => $userId,
+                    'conflicting_assessment_id' => $conflict->id,
+                    'conflicting_assessment_title' => $conflict->title,
+                ];
+                continue;
+            }
+
             $assignment = AssessmentAssignment::firstOrCreate([
-                'assessment_id' => $validated['assessment_id'],
+                'assessment_id' => $assessment->id,
                 'user_id' => $userId,
             ]);
 
@@ -89,8 +134,9 @@ class AssessmentAssignmentController extends Controller
         }
 
         return response()->json([
-            'message' => 'Assessment assigned to students successfully',
-            'assignments' => $assignments,
+            'message' => 'Assessment assignment completed',
+            'assigned' => $assignments,
+            'blocked_due_to_conflict' => $conflicts,
         ], 201);
     }
 

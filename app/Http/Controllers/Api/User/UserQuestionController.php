@@ -52,7 +52,11 @@ class UserQuestionController extends Controller
 
         // Fetch questions in stored order
         $questions = AssessmentQuestion::whereIn('id', $ordered)
-            ->with('choices')
+            ->with([
+                'choices' => function ($q) {
+                    $q->select('id', 'question_id', 'option', 'order');
+                }
+            ])
             ->get()
             ->sortBy(function ($q) use ($ordered) {
                 return array_search($q->id, $ordered);
@@ -62,5 +66,5 @@ class UserQuestionController extends Controller
         return response()->json($questions);
     }
 
-    
+
 }
