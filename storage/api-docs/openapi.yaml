@@ -920,45 +920,160 @@ paths:
         '200':
           description: Logged out
 
-  /user/assessments:
-    get:
-      tags: [User Assessments]
-      summary: List all assessments assigned to user
-      responses:
-        '200':
-          description: List of assessments
-
+  # Assessments
   /user/assessments/upcoming:
     get:
       tags: [User Assessments]
-      summary: Get upcoming assessments (not started yet today)
+      summary: Upcoming assessments
+      description: List all assessments assigned to the user (regardless of date)
+      security:
+        - bearerAuth: []
       responses:
-        '200':
+        200:
           description: List of upcoming assessments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        401:
+          description: Unauthorized
+
+  /user/assessments/today:
+    get:
+      tags: [User Assessments]
+      summary: Today's assessments
+      description: Assessments scheduled for today but not yet started
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: List of today's assessments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        401:
+          description: Unauthorized
 
   /user/assessments/running:
     get:
       tags: [User Assessments]
-      summary: Get currently running assessments
+      summary: Running assessments
+      description: Assessments the user can take right now
+      security:
+        - bearerAuth: []
       responses:
-        '200':
+        200:
           description: List of running assessments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        401:
+          description: Unauthorized
+
+  /user/assessments/completed:
+    get:
+      tags: [User Assessments]
+      summary: Completed assessments
+      description: Assessments already attempted by the user
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: List of completed assessments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        401:
+          description: Unauthorized
+
+  /user/assessments/missed:
+    get:
+      tags: [User Assessments]
+      summary: Missed assessments
+      description: >
+        Assessments whose time window has passed
+        and were not attempted by the user
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: List of missed assessments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        401:
+          description: Unauthorized
 
   /user/assessments/{id}:
     get:
       tags: [User Assessments]
-      summary: Get single assessment (only if assigned)
+      summary: Get assigned assessment
+      description: >
+        Retrieve a single assessment only if it is assigned to the authenticated user.
+      security:
+        - bearerAuth: []
       parameters:
-        - in: path
-          name: id
+        - name: id
+          in: path
           required: true
           schema:
             type: integer
+          description: Assessment ID
       responses:
-        '200':
-          description: Assessment details
-        '404':
-          description: Assessment not found or not assigned
+        200:
+          description: Assigned assessment details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  topic_id:
+                    type: integer
+                  assessment_type_id:
+                    type: integer
+                  title:
+                    type: string
+                  description:
+                    type: string
+                    nullable: true
+                  publish_date:
+                    type: string
+                    format: date
+                  start_time:
+                    type: string
+                    format: time
+                  end_time:
+                    type: string
+                    format: time
+                  is_active:
+                    type: boolean
+                  created_at:
+                    type: string
+                    format: date-time
+                  updated_at:
+                    type: string
+                    format: date-time
+        401:
+          description: Unauthorized
+        404:
+          description: Assessment not assigned to user
+
 
   /user/assessments/{id}/start:
     post:

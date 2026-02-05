@@ -25,9 +25,11 @@ Route::prefix('user')->group(function () {
 Route::prefix('user')->middleware('user')->group(function () {
 
     // Assessments
-    Route::get('assessments', [UserAssessmentController::class, 'index']);
     Route::get('assessments/upcoming', [UserAssessmentController::class, 'upcoming']);
+    Route::get('assessments/today', [UserAssessmentController::class, 'today']);
     Route::get('assessments/running', [UserAssessmentController::class, 'running']);
+    Route::get('assessments/completed', [UserAssessmentController::class, 'completed']);
+    Route::get('assessments/missed', [UserAssessmentController::class, 'missed']);
     Route::get('assessments/{id}', [UserAssessmentController::class, 'show']);
 
     // Attempt control
@@ -42,4 +44,5 @@ Route::prefix('user')->middleware('user')->group(function () {
     // Notifications
     Route::get('notifications', [UserNotificationController::class, 'index']);
     Route::post('notifications/read-all', [UserNotificationController::class, 'markAllRead']);
+
 });
