@@ -9,11 +9,25 @@ use Illuminate\Http\Request;
 class UserAssessmentController extends Controller
 {
     // Upcoming assessments (previously index)
+// Upcoming assessments (not started and not ended yet)
     public function upcoming(Request $request)
     {
         $user = $request->user('users');
 
+        $today = app_now()->toDateString();
+        $nowTime = app_now()->toTimeString();
+
         $assessments = AssessmentAssignment::where('user_id', $user->id)
+            ->whereHas('assessment', function ($q) use ($today, $nowTime) {
+                $q->where('is_active', true)
+                    ->where(function ($q2) use ($today, $nowTime) {
+                        $q2->where('publish_date', '>', $today)
+                            ->orWhere(function ($q3) use ($today, $nowTime) {
+                                $q3->where('publish_date', $today)
+                                    ->where('start_time', '>', $nowTime);
+                            });
+                    });
+            })
             ->with('assessment')
             ->get()
             ->pluck('assessment');
@@ -32,8 +46,8 @@ class UserAssessmentController extends Controller
         $assessments = AssessmentAssignment::where('user_id', $user->id)
             ->whereHas('assessment', function ($q) use ($today, $nowTime) {
                 $q->where('is_active', true)
-                  ->where('publish_date', $today)
-                  ->where('start_time', '>', $nowTime);
+                    ->where('publish_date', $today)
+                    ->where('start_time', '>', $nowTime);
             })
             ->with('assessment')
             ->get()
@@ -53,9 +67,9 @@ class UserAssessmentController extends Controller
         $assessments = AssessmentAssignment::where('user_id', $user->id)
             ->whereHas('assessment', function ($q) use ($today, $nowTime) {
                 $q->where('is_active', true)
-                  ->where('publish_date', $today)
-                  ->where('start_time', '<=', $nowTime)
-                  ->where('end_time', '>=', $nowTime);
+                    ->where('publish_date', $today)
+                    ->where('start_time', '<=', $nowTime)
+                    ->where('end_time', '>=', $nowTime);
             })
             ->with('assessment')
             ->get()
@@ -69,10 +83,12 @@ class UserAssessmentController extends Controller
     {
         $user = $request->user('users');
 
+        $assessmentIds = \DB::table('assessment_attempts')
+            ->where('user_id', $user->id)
+            ->pluck('assessment_id');
+
         $assessments = AssessmentAssignment::where('user_id', $user->id)
-            ->whereHas('assessment.attempts', function ($q) use ($user) {
-                $q->where('user_id', $user->id);
-            })
+            ->whereIn('assessment_id', $assessmentIds)
             ->with('assessment')
             ->get()
             ->pluck('assessment');
@@ -88,18 +104,20 @@ class UserAssessmentController extends Controller
         $today = app_now()->toDateString();
         $nowTime = app_now()->toTimeString();
 
+        $attemptedIds = \DB::table('assessment_attempts')
+            ->where('user_id', $user->id)
+            ->pluck('assessment_id');
+
         $assessments = AssessmentAssignment::where('user_id', $user->id)
+            ->whereNotIn('assessment_id', $attemptedIds)
             ->whereHas('assessment', function ($q) use ($today, $nowTime) {
                 $q->where(function ($q2) use ($today, $nowTime) {
                     $q2->where('publish_date', '<', $today)
-                       ->orWhere(function ($q3) use ($today, $nowTime) {
-                           $q3->where('publish_date', $today)
-                              ->where('end_time', '<', $nowTime);
-                       });
+                        ->orWhere(function ($q3) use ($today, $nowTime) {
+                            $q3->where('publish_date', $today)
+                                ->where('end_time', '<', $nowTime);
+                        });
                 });
-            })
-            ->whereDoesntHave('assessment.attempts', function ($q) use ($user) {
-                $q->where('user_id', $user->id);
             })
             ->with('assessment')
             ->get()
