@@ -25,6 +25,9 @@ return [
     'allowed_origins' => [
         'http://localhost:3000', // CRA
         'http://localhost:5173', // Vite
+        'http://localhost:5174', // Vite
+        'http://localhost:5175', // Vite
+        'http://localhost:5176', // Vite
         'http://localhost:8080', // Next / custom
         'http://127.0.0.1:3000',
         'https://seashell-okapi-169452.hostingersite.com',
