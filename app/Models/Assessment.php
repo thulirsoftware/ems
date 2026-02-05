@@ -40,4 +40,9 @@ class Assessment extends Model
     {
         return $this->belongsTo(AssessmentType::class, 'assessment_type_id');
     }
+
+    public function questions()
+    {
+        return $this->hasMany(AssessmentQuestion::class);
+    }
 }
