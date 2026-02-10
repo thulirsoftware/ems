@@ -84,7 +84,7 @@ class AdminResultController extends Controller
 
         $attempt = AssessmentAttempt::where('assessment_id', $assessment_id)
             ->where('user_id', $user_id)
-            ->with(['answers.question.choices'])
+            ->with('answers')
             ->first();
 
         if (!$attempt || !$attempt->submitted_at) {
@@ -93,28 +93,63 @@ class AdminResultController extends Controller
             ], 400);
         }
 
-        $questions = $attempt->answers->map(function ($answer) {
+        // Load all questions with choices
+        $questions = $assessment->questions()->with('choices')->get();
 
-            $yourChoice = $answer->question->choices
-                ->firstWhere('id', $answer->answer['choice_id'] ?? null);
+        $answers = $attempt->answers->keyBy('question_id');
 
-            $correctChoice = $answer->question->choices
-                ->firstWhere('is_correct', true);
+        $correct = 0;
+        $wrong = 0;
+        $unanswered = 0;
+
+        $questionData = $questions->map(function ($question) use ($answers, &$correct, &$wrong, &$unanswered) {
+
+            $answer = $answers->get($question->id);
+            $userOptionId = $answer->answer['choice_id'] ?? null;
+
+            $correctOption = $question->choices->firstWhere('is_correct', true);
+            $correctOptionId = $correctOption?->id;
+
+            if (!$userOptionId) {
+                $unanswered++;
+            } elseif ($userOptionId == $correctOptionId) {
+                $correct++;
+            } else {
+                $wrong++;
+            }
 
             return [
-                'question_id' => $answer->question_id,
-                'question' => $answer->question->question_text,
-                'your_choice' => $yourChoice?->option,
-                'correct_choice' => $correctChoice?->option,
-                'is_correct' => $answer->is_correct,
+                'id' => $question->id,
+                'question_text' => $question->question_text,
+                'options' => $question->choices->map(function ($choice) {
+                    return [
+                        'id' => $choice->id,
+                        'option' => $choice->option,
+                    ];
+                })->values(),
+                'correct_option_id' => $correctOptionId,
+                'user_option_id' => $userOptionId,
             ];
         });
+
+        $totalQuestions = $questions->count();
+
+        $scoreValue = (int) explode('/', $attempt->score)[0];
+
+        $percentage = $totalQuestions > 0
+            ? round(($scoreValue / $totalQuestions) * 100)
+            : 0;
 
         return response()->json([
             'assessment_id' => $assessment_id,
             'user_id' => $user_id,
-            'score' => $attempt->score,
-            'result' => $questions
+            'score' => $scoreValue,
+            'total_marks' => $totalQuestions,
+            'percentage' => $percentage,
+            'correct' => $correct,
+            'wrong' => $wrong,
+            'unanswered' => $unanswered,
+            'questions' => $questionData,
         ]);
     }
 }
