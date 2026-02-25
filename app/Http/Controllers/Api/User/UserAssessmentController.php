@@ -71,6 +71,14 @@ class UserAssessmentController extends Controller
                     ->where('start_time', '<=', $nowTime)
                     ->where('end_time', '>=', $nowTime);
             })
+            // 🚫 exclude completed attempts
+            ->whereNotExists(function ($q) use ($user) {
+                $q->selectRaw(1)
+                ->from('assessment_attempts')
+                ->whereColumn('assessment_attempts.assessment_id', 'assessment_assignments.assessment_id')
+                ->where('assessment_attempts.user_id', $user->id)
+                ->whereNotNull('assessment_attempts.submitted_at');
+            })
             ->with('assessment')
             ->get()
             ->pluck('assessment');
