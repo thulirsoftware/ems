@@ -87,6 +87,12 @@ class AssessmentAttemptController extends Controller
                 $result = $this->evaluateMcq($attempt);
                 break;
 
+            case 'descriptive':
+            case 'coding':
+            case 'case_based':
+                $result = $this->submitManualAssessment($attempt);
+                break;
+
             default:
                 return response()->json([
                     'message' => 'Unsupported assessment type'
@@ -157,6 +163,18 @@ class AssessmentAttemptController extends Controller
         ];
     }
 
+    private function submitManualAssessment(AssessmentAttempt $attempt)
+    {
+        $totalQuestions = $attempt->assessment->questions()->count();
+
+        return [
+            'score' => 'Pending Evaluation',
+            'correct' => 0,
+            'wrong' => 0,
+            'total' => $totalQuestions,
+        ];
+    }
+
     public function result(Request $request, $assessment_id)
     {
         $user = $request->user('users');
@@ -173,11 +191,31 @@ class AssessmentAttemptController extends Controller
             ], 400);
         }
 
+        if ($attempt->score === 'Pending Evaluation') {
+            return response()->json([
+                'message' => 'Your assessment is under evaluation'
+            ], 403);
+        }
+
         // Paginate questions instead of answers
-        $questions = $attempt->assessment
-            ->questions()
+        $ordered = $attempt->question_order ?? [];
+
+        $totalQuestions = count($ordered);
+
+        $page = $request->get('page', 1);
+        $pageSize = $request->get('page_size', 10);
+
+        $offset = ($page - 1) * $pageSize;
+
+        $paginatedIds = array_slice($ordered, $offset, $pageSize);
+
+        $questions = \App\Models\AssessmentQuestion::whereIn('id', $paginatedIds)
             ->with('choices')
-            ->paginate($pageSize);
+            ->get()
+            ->sortBy(function ($q) use ($paginatedIds) {
+                return array_search($q->id, $paginatedIds);
+            })
+            ->values();
 
         $answers = $attempt->answers->keyBy('question_id');
 
@@ -185,11 +223,11 @@ class AssessmentAttemptController extends Controller
         $wrong = 0;
         $unanswered = 0;
 
-        $questionData = $questions->getCollection()->map(function ($question) use ($answers, &$correct, &$wrong, &$unanswered) {
+        $questionData = $questions->map(function ($question) use ($answers, &$correct, &$wrong, &$unanswered) {
 
             $answer = $answers->get($question->id);
-            $userOptionId = $answer->answer['choice_id'] ?? null;
-
+            $userOptionId = $answer?->answer['choice_id'] ?? null;
+            
             $correctOption = $question->choices->firstWhere('is_correct', true);
             $correctOptionId = $correctOption?->id;
 
@@ -215,12 +253,13 @@ class AssessmentAttemptController extends Controller
             ];
         });
 
-        $totalQuestions = $attempt->assessment->questions()->count();
-
         $scoreValue = (int) explode('/', $attempt->score)[0];
         $percentage = $totalQuestions > 0
             ? round(($scoreValue / $totalQuestions) * 100)
             : 0;
+
+        $currentPage = $page;
+        $totalPages = (int) ceil($totalQuestions / $pageSize);
 
         return response()->json([
             'score' => $scoreValue,
@@ -230,8 +269,8 @@ class AssessmentAttemptController extends Controller
             'wrong' => $wrong,
             'unanswered' => $unanswered,
             'questions' => $questionData,
-            'current_page' => $questions->currentPage(),
-            'total_pages' => $questions->lastPage(),
+            'current_page' => $currentPage,
+            'total_pages' => $totalPages,
         ]);
     }
 }

@@ -42,6 +42,18 @@ class UserAnswerController extends Controller
                 $answerData = $this->handleMcq($validated);
                 break;
 
+            case 'descriptive':
+                $answerData = $this->handleDescriptive($validated);
+                break;
+
+            case 'coding':
+                $answerData = $this->handleCoding($validated);
+                break;
+
+            case 'case_based':
+                $answerData = $this->handleCaseBased($validated);
+                break;
+
             default:
                 return response()->json([
                     'message' => 'Unsupported assessment type'
@@ -64,7 +76,6 @@ class UserAnswerController extends Controller
         ]);
     }
 
-    // Only MCQ for now
     private function handleMcq(array $data)
     {
         AssessmentChoice::where('id', $data['choice_id'])
@@ -73,6 +84,39 @@ class UserAnswerController extends Controller
 
         return [
             'choice_id' => $data['choice_id']
+        ];
+    }
+
+    private function handleDescriptive(array $data)
+    {
+        if (empty($data['answer'])) {
+            abort(422, 'Answer is required');
+        }
+
+        return [
+            'text' => $data['answer']
+        ];
+    }
+
+    private function handleCoding(array $data)
+    {
+        if (empty($data['answer'])) {
+            abort(422, 'Code answer is required');
+        }
+
+        return [
+            'code' => $data['answer']
+        ];
+    }
+
+    private function handleCaseBased(array $data)
+    {
+        if (empty($data['answer'])) {
+            abort(422, 'Answer is required');
+        }
+
+        return [
+            'text' => $data['answer']
         ];
     }
 }

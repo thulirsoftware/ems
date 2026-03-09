@@ -35,9 +35,10 @@ class AssessmentQuestionController extends Controller
             ->firstOrFail();
 
         $validated = $request->validate([
-            'type' => 'required|string',
+            'type' => 'required|in:mcq,descriptive',
             'question_text' => 'required|string',
-            'order' => 'nullable|integer',
+            'order' => 'required|integer',
+            'config' => 'required_if:type,case_based|array',
         ]);
 
         $question = AssessmentQuestion::create([
@@ -57,9 +58,10 @@ class AssessmentQuestionController extends Controller
         })->where('id', $id)->firstOrFail();
 
         $validated = $request->validate([
-            'type' => 'sometimes|string',
+            'type' => 'sometimes|in:mcq,descriptive',
             'question_text' => 'sometimes|string',
             'order' => 'nullable|integer',
+            'config' => 'nullable|array',
         ]);
 
         $question->update($validated);
@@ -121,7 +123,7 @@ class AssessmentQuestionController extends Controller
             ->firstOrFail();
 
         $validated = $request->validate([
-            'type' => 'required|string',
+            'type' => 'required|in:mcq',
             'question_text' => 'required|string',
             'order' => 'nullable|integer',
 
@@ -164,7 +166,7 @@ class AssessmentQuestionController extends Controller
         })->where('id', $question_id)->firstOrFail();
 
         $validated = $request->validate([
-            'type' => 'required|string',
+            'type' => 'required|in:mcq',
             'question_text' => 'required|string',
             'order' => 'nullable|integer',
             'choices' => 'required|array|size:4',

@@ -6,10 +6,10 @@ info:
   version: 1.0.0
 
 servers:
-  - url: http://192.168.0.142:8000/web/v1
-    description: Web (Cookies + CSRF)
-  - url: http://192.168.0.142:8000/api/v1
+  - url: http://127.0.0.1:8000/api/v1
     description: Mobile apps (Bearer token)
+  - url: http://127.0.0.1:8000/web/v1
+    description: Web (Cookies + CSRF)
 
   - url: https://seashell-okapi-169452.hostingersite.com/ems/public/web/v1
     description: Production Web
@@ -816,6 +816,67 @@ paths:
           description: User result details
         400:
           description: User has not submitted the assessment
+        403:
+          description: Assessment results are not available yet
+
+  /admin/results/{assessment_id}/user/{user_id}/answers:
+    get:
+      tags: [Admin Assessment Results]
+      summary: Get user answers for manual grading
+      parameters:
+        - name: assessment_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Questions with user answers for grading
+        400:
+          description: User has not submitted or already evaluated
+
+  /admin/results/{assessment_id}/user/{user_id}/question/{question_id}/grade:
+    post:
+      tags: [Admin Assessment Results]
+      summary: Grade an individual answer
+      parameters:
+        - name: assessment_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: question_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - is_correct
+              properties:
+                is_correct:
+                  type: boolean
+                  example: true
+      responses:
+        200:
+          description: Answer graded successfully
+        400:
+          description: Invalid grading request
 
   # -------------------------------------------------------- User --------------------------------------------------------
   /user/register:

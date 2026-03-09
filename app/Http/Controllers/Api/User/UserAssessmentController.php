@@ -8,8 +8,7 @@ use Illuminate\Http\Request;
 
 class UserAssessmentController extends Controller
 {
-    // Upcoming assessments (previously index)
-// Upcoming assessments (not started and not ended yet)
+    // Upcoming assessments (not started and not ended yet)
     public function upcoming(Request $request)
     {
         $user = $request->user('users');

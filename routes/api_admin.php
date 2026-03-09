@@ -68,4 +68,7 @@ Route::prefix('admin')->middleware('admin')->group(function () {
     Route::get('results/finished', [AdminResultController::class, 'finishedAssessments']);
     Route::get('results/{assessment_id}/users', [AdminResultController::class, 'usersByAssessment']);
     Route::get('results/{assessment_id}/user/{user_id}', [AdminResultController::class, 'userResult']);
+    Route::get('results/{assessment_id}/user/{user_id}/answers', [AdminResultController::class, 'userAnswersForGrading']);
+    Route::post('results/{assessment_id}/user/{user_id}/question/{question_id}/grade', [AdminResultController::class, 'gradeAnswer']);
+    Route::get('results/{assessment_id}/rank-list', [AdminResultController::class, 'rankList']);
 });

@@ -9,9 +9,14 @@ class AssessmentTypeSeeder extends Seeder
 {
     public function run(): void
     {
+        // AssessmentType::create([
+        //     'name' => 'MCQ',
+        //     'slug' => 'mcq',
+        // ]);
+
         AssessmentType::create([
-            'name' => 'MCQ',
-            'slug' => 'mcq',
+            'name' => 'Descriptive',
+            'slug' => 'descriptive',
         ]);
     }
 }

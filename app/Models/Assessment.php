@@ -18,6 +18,7 @@ class Assessment extends Model
         'publish_date',
         'start_time',
         'end_time',
+        'difficulty_level',
         'shuffle',
         'is_library',
         'has_negative',
