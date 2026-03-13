@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\Admin\AdminAuthController;
+use App\Http\Controllers\Api\Admin\AdminBatchController;
 use App\Http\Controllers\Api\Admin\AdminResultController;
 use App\Http\Controllers\Api\Admin\AdminUserController;
 use App\Http\Controllers\Api\Admin\AssessmentController;
@@ -25,6 +26,19 @@ Route::prefix('admin')->group(function () {
 Route::prefix('admin')->middleware('admin')->group(function () {
     Route::get('users', [AdminUserController::class, 'index']);
     Route::post('users', [AdminUserController::class, 'store']);
+});
+
+
+Route::prefix('admin')->middleware('admin')->group(function () {
+    Route::get('batches', [AdminBatchController::class, 'batches']);
+    Route::get('batches/unassigned-users', [AdminBatchController::class, 'unassignedUsers']);
+    Route::post('batches/add-users', [AdminBatchController::class, 'addUsers']);
+    Route::post('batches/assign-unassigned', [AdminBatchController::class, 'assignUnassigned']);
+    Route::post('batches/remove-users', [AdminBatchController::class, 'removeUsers']);
+    Route::get('batches/{batch_id}/users', [AdminBatchController::class, 'batchUsers']);
+    Route::get('batches/capacity', [AdminBatchController::class, 'getBatchCapacity']);
+    Route::post('batches/capacity', [AdminBatchController::class, 'updateBatchCapacity']);
+    Route::post('batches/rebalance', [AdminBatchController::class, 'rebalanceBatches']);
 });
 
 // Admin assessments

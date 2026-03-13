@@ -15,11 +15,25 @@ class UserAnswerController extends Controller
     {
         $user = $request->user('users');
 
-        $validated = $request->validate([
+        $assessment = Assessment::with('type')
+            ->where('id', $assessment_id)
+            ->firstOrFail();
+
+        $type = $assessment->type->slug;
+
+        $rules = [
             'question_id' => 'required|exists:assessment_questions,id',
-            'choice_id' => 'required|exists:assessment_choices,id',
-            'answer' => 'nullable|string'
-        ]);
+        ];
+
+        if ($type === 'mcq') {
+            $rules['choice_id'] = 'required|exists:assessment_choices,id';
+        } else {
+            $rules['choice_id'] = 'nullable|exists:assessment_choices,id';
+        }
+
+        $rules['answer'] = 'nullable|string';
+
+        $validated = $request->validate($rules);
 
         $attempt = AssessmentAttempt::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)

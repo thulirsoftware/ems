@@ -188,7 +188,234 @@ paths:
         401:
           description: Unauthenticated
 
+  /admin/batches:
+    get:
+      tags: [Admin Batches]
+      summary: Get all batches
+      description: Retrieve all batches with user count
+      responses:
+        200:
+          description: List of batches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+                    users_count:
+                      type: integer
+        401:
+          description: Unauthenticated
 
+
+  /admin/batches/unassigned-users:
+    get:
+      tags: [Admin Batches]
+      summary: Get unassigned users
+      description: Retrieve users that are not assigned to any batch
+      responses:
+        200:
+          description: List of unassigned users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+                    email:
+                      type: string
+        401:
+          description: Unauthenticated
+
+
+  /admin/batches/{batch_id}/users:
+    get:
+      tags: [Admin Batches]
+      summary: Get users in a batch
+      description: Retrieve users belonging to a specific batch
+      parameters:
+        - name: batch_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Users in batch
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+                    email:
+                      type: string
+        401:
+          description: Unauthenticated
+
+
+  /admin/batches/add-users:
+    post:
+      tags: [Admin Batches]
+      summary: Add users to batches
+      description: Assign users to batches automatically based on capacity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_ids]
+              properties:
+                user_ids:
+                  type: array
+                  items:
+                    type: integer
+      responses:
+        200:
+          description: Users assigned successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        401:
+          description: Unauthenticated
+
+
+  /admin/batches/assign-unassigned:
+    post:
+      tags: [Admin Batches]
+      summary: Assign all unassigned users
+      description: Automatically distribute all unassigned users into batches based on capacity
+      responses:
+        200:
+          description: Unassigned users assigned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        401:
+          description: Unauthenticated
+
+
+  /admin/batches/remove-users:
+    post:
+      tags: [Admin Batches]
+      summary: Remove users from batches
+      description: Remove selected users from their batches
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_ids]
+              properties:
+                user_ids:
+                  type: array
+                  items:
+                    type: integer
+      responses:
+        200:
+          description: Users removed from batch
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        401:
+          description: Unauthenticated
+
+
+  /admin/batches/capacity:
+    get:
+      tags: [Admin Batches]
+      summary: Get batch capacity
+      description: Retrieve the configured batch capacity
+      responses:
+        200:
+          description: Batch capacity
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  batch_capacity:
+                    type: integer
+        401:
+          description: Unauthenticated
+
+    post:
+      tags: [Admin Batches]
+      summary: Update batch capacity
+      description: Update the maximum number of users allowed per batch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [batch_capacity]
+              properties:
+                batch_capacity:
+                  type: integer
+      responses:
+        200:
+          description: Batch capacity updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  batch_capacity:
+                    type: integer
+        401:
+          description: Unauthenticated
+
+
+  /admin/batches/rebalance:
+    post:
+      tags: [Admin Batches]
+      summary: Rebalance batches
+      description: Recreate batches and redistribute all users based on batch capacity
+      responses:
+        200:
+          description: Batches rebalanced successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        401:
+          description: Unauthenticated
+          
   /admin/assessments:
     get:
       tags: [Admin Assessments]

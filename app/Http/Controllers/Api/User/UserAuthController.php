@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\User;
 
 use App\Http\Controllers\Controller;
+use App\Models\Batch;
+use App\Models\Setting;
 use Illuminate\Http\Request;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
@@ -20,10 +22,36 @@ class UserAuthController extends Controller
             'password' => 'required|string|min:8',
         ]);
 
+        $capacity = (int) Setting::get('batch_capacity');
+
+        // Get latest batch
+        $batch = Batch::latest()->first();
+
+        // Create first batch if none exists
+        if (!$batch) {
+            $batch = Batch::create([
+                'name' => 'Batch 1'
+            ]);
+        }
+
+        // Count users in batch
+        $userCount = User::where('batch_id', $batch->id)->count();
+
+        // If batch full create new batch
+        if ($userCount >= $capacity) {
+
+            $batchNumber = (Batch::max('id') ?? 0) + 1;
+
+            $batch = Batch::create([
+                'name' => 'Batch ' . $batchNumber
+            ]);
+        }
+
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
+            'batch_id' => $batch->id
         ]);
 
         return response()->json($user, 201);
