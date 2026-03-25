@@ -10,12 +10,17 @@ class Batch extends Model
     use HasFactory;
 
     protected $fillable = [
-        'name'
+        'name',
+        'publish_date',
+        'start_time',
+        'end_time',
+        'is_batch_wise',
+        'assessment_id',
+        'capacity',
+        'user_ids',
     ];
 
-    // Users belonging to this batch
-    public function users()
-    {
-        return $this->hasMany(User::class);
-    }
+    protected $casts = [
+        'user_ids' => 'array'
+    ];
 }

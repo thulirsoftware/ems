@@ -28,17 +28,16 @@ Route::prefix('admin')->middleware('admin')->group(function () {
     Route::post('users', [AdminUserController::class, 'store']);
 });
 
-
 Route::prefix('admin')->middleware('admin')->group(function () {
-    Route::get('batches', [AdminBatchController::class, 'batches']);
-    Route::get('batches/unassigned-users', [AdminBatchController::class, 'unassignedUsers']);
-    Route::post('batches/add-users', [AdminBatchController::class, 'addUsers']);
-    Route::post('batches/assign-unassigned', [AdminBatchController::class, 'assignUnassigned']);
-    Route::post('batches/remove-users', [AdminBatchController::class, 'removeUsers']);
-    Route::get('batches/{batch_id}/users', [AdminBatchController::class, 'batchUsers']);
-    Route::get('batches/capacity', [AdminBatchController::class, 'getBatchCapacity']);
-    Route::post('batches/capacity', [AdminBatchController::class, 'updateBatchCapacity']);
-    Route::post('batches/rebalance', [AdminBatchController::class, 'rebalanceBatches']);
+    Route::prefix('batches')->group(function () {
+        Route::get('/', [AdminBatchController::class, 'index']);
+        Route::post('/', [AdminBatchController::class, 'store']);
+        Route::get('{id}', [AdminBatchController::class, 'show']);
+        Route::put('{id}', [AdminBatchController::class, 'update']);
+        Route::delete('{id}', [AdminBatchController::class, 'destroy']);
+        Route::post('{id}/users', [AdminBatchController::class, 'addUsers']);
+        Route::delete('{id}/users', [AdminBatchController::class, 'removeUsers']);
+    });
 });
 
 // Admin assessments

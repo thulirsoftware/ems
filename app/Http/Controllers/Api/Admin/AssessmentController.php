@@ -42,9 +42,13 @@ class AssessmentController extends Controller
             'assessment_type_id' => 'required|exists:assessment_types,id',
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'publish_date' => 'required|date',
-            'start_time' => 'required|date_format:H:i:s',
-            'end_time' => 'required|date_format:H:i:s',
+
+            'is_batch_wise' => 'required|boolean',
+
+            'publish_date' => 'required_if:is_batch_wise,false|date',
+            'start_time' => 'required_if:is_batch_wise,false|date_format:H:i:s',
+            'end_time' => 'required_if:is_batch_wise,false|date_format:H:i:s',
+
             'difficulty_level' => 'required|string',
             'shuffle' => 'boolean',
             'is_library' => 'boolean',
@@ -93,6 +97,7 @@ class AssessmentController extends Controller
             'is_active' => 'boolean',
             'has_negative' => 'boolean',
             'negative_marks' => 'nullable|numeric|min:0',
+            'is_batch_wise' => 'boolean'
         ]);
 
         $assessment->update($validated);

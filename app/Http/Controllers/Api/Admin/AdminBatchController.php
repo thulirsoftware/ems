@@ -3,206 +3,139 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
-use DB;
-use Illuminate\Http\Request;
-use App\Models\User;
 use App\Models\Batch;
-use App\Models\Setting;
+use Illuminate\Http\Request;
 
 class AdminBatchController extends Controller
 {
-    // Get batch capacity
-    private function capacity()
+    // Get all batches
+    public function index()
     {
-        return (int) Setting::get('batch_capacity') ?? 5;
+        return response()->json(Batch::all());
     }
 
-    // List all batches with user count
-    public function batches()
+    // Store new batch
+    public function store(Request $request)
     {
-        $batches = Batch::withCount('users')->get();
-
-        return response()->json($batches);
-    }
-
-    // Get users in batch
-    public function batchUsers($batch_id)
-    {
-        $users = User::where('batch_id', $batch_id)->get();
-
-        return response()->json($users);
-    }
-
-    // Get unassigned users
-    public function unassignedUsers()
-    {
-        $users = User::whereNull('batch_id')->get();
-
-        return response()->json($users);
-    }
-
-    // Add users to batches (auto create batch if capacity reached)
-    public function addUsers(Request $request)
-    {
-        $request->validate([
-            'user_ids' => 'required|array'
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'publish_date' => 'required|date',
+            'start_time' => 'required|date_format:H:i:s',
+            'end_time' => 'required|date_format:H:i:s',
+            'assessment_id' => 'required|exists:assessments,id',
+            'capacity' => 'required|integer|min:1',
         ]);
 
-        $capacity = $this->capacity();
+        $batch = Batch::create($validated);
 
-        $batch = Batch::latest()->first();
+        return response()->json($batch, 201);
+    }
 
-        if (!$batch) {
-            $batch = Batch::create([
-                'name' => 'Batch 1'
-            ]);
+    // Get single batch
+    public function show($id)
+    {
+        return response()->json(Batch::findOrFail($id));
+    }
+
+    // Update batch
+    public function update(Request $request, $id)
+    {
+        $batch = Batch::findOrFail($id);
+
+        $validated = $request->validate([
+            'name' => 'sometimes|required|string|max:255',
+            'publish_date' => 'nullable|date',
+            'start_time' => 'nullable|date_format:H:i:s',
+            'end_time' => 'nullable|date_format:H:i:s',
+            'assessment_id' => 'nullable|exists:assessments,id',
+            'capacity' => 'sometimes|required|integer|min:1',
+        ]);
+
+        $batch->update($validated);
+
+        return response()->json($batch);
+    }
+
+    // Delete batch
+    public function destroy($id)
+    {
+        Batch::findOrFail($id)->delete();
+
+        return response()->json(['message' => 'Batch deleted']);
+    }
+
+    public function addUsers(Request $request, $id)
+    {
+        $batch = Batch::findOrFail($id);
+
+        $validated = $request->validate([
+            'user_ids' => 'required|array',
+            'user_ids.*' => 'exists:users,id',
+        ]);
+
+        $existing = $batch->user_ids ?? [];
+
+        $merged = array_unique(array_merge($existing, $validated['user_ids']));
+
+        // optional capacity check
+        if ($batch->capacity && count($merged) > $batch->capacity) {
+            return response()->json(['message' => 'Capacity exceeded'], 422);
         }
 
-        foreach ($request->user_ids as $userId) {
+        $batch->update([
+            'user_ids' => $merged
+        ]);
 
-            $count = User::where('batch_id', $batch->id)->count();
+        $newUsers = array_values(array_diff($validated['user_ids'], $existing));
 
-            if ($count >= $capacity) {
+        $assignmentResponse = null;
 
-                $batchNumber = (Batch::max('id') ?? 0) + 1;
+        if (!empty($newUsers) && $batch->assessment_id) {
+            $assignmentController = app(AssessmentAssignmentController::class);
 
-                $batch = Batch::create([
-                    'name' => 'Batch ' . $batchNumber
-                ]);
-            }
-
-            User::where('id', $userId)->update([
-                'batch_id' => $batch->id
+            $request->merge([
+                'assessment_id' => $batch->assessment_id,
+                'user_ids' => $newUsers,
+                'batch_id' => $batch->id,
             ]);
+
+            $assignmentResponse = $assignmentController->store($request);
         }
 
         return response()->json([
-            'message' => 'Users assigned to batches successfully'
+            'batch' => $batch,
+            'assignment' => $assignmentResponse?->getData(true)
         ]);
     }
 
-    // Assign all unassigned users automatically
-    public function assignUnassigned()
+    public function removeUsers(Request $request, $id)
     {
-        DB::transaction(function () {
+        $batch = Batch::findOrFail($id);
 
-            $capacity = $this->capacity();
-
-            $batch = Batch::latest()->first();
-
-            if (!$batch) {
-                $batch = Batch::create([
-                    'name' => 'Batch 1'
-                ]);
-            }
-
-            $users = User::whereNull('batch_id')->get();
-
-            foreach ($users as $user) {
-
-                $count = User::where('batch_id', $batch->id)->count();
-
-                if ($count >= $capacity) {
-
-                    $batchNumber = (Batch::max('id') ?? 0) + 1;
-
-                    $batch = Batch::create([
-                        'name' => 'Batch ' . $batchNumber
-                    ]);
-                }
-
-                $user->update([
-                    'batch_id' => $batch->id
-                ]);
-            }
-
-        });
-
-        return response()->json([
-            'message' => 'Unassigned users assigned'
-        ]);
-    }
-
-    // Remove users from batch
-    public function removeUsers(Request $request)
-    {
-        $request->validate([
-            'user_ids' => 'required|array'
+        $validated = $request->validate([
+            'user_ids' => 'required|array',
+            'user_ids.*' => 'exists:users,id',
         ]);
 
-        User::whereIn('id', $request->user_ids)
-            ->update(['batch_id' => null]);
+        $existing = $batch->user_ids ?? [];
 
-        return response()->json([
-            'message' => 'Users removed from batch'
-        ]);
-    }
+        $updated = array_values(array_diff($existing, $validated['user_ids']));
 
-    // Return system settings for frontend
-    public function getBatchCapacity()
-    {
-        $capacity = Setting::get('batch_capacity');
-
-        return response()->json([
-            'batch_capacity' => (int) $capacity
-        ]);
-    }
-
-    public function updateBatchCapacity(Request $request)
-    {
-        $request->validate([
-            'batch_capacity' => 'required|integer|min:1'
+        $batch->update([
+            'user_ids' => $updated
         ]);
 
-        Setting::where('key', 'batch_capacity')->update([
-            'value' => $request->batch_capacity
-        ]);
+        if ($batch->assessment_id) {
+            $assignmentController = app(AssessmentAssignmentController::class);
 
-        return response()->json([
-            'message' => 'Batch capacity updated successfully',
-            'batch_capacity' => (int) $request->batch_capacity
-        ]);
-    }
-
-    public function rebalanceBatches()
-    {
-        $capacity = (int) Setting::get('batch_capacity');
-
-        DB::transaction(function () use ($capacity) {
-
-            $users = User::orderBy('created_at')->get();
-
-            $batchNumber = 1;
-            $count = 0;
-
-            Batch::truncate();
-
-            $batch = Batch::create([
-                'name' => 'Batch ' . $batchNumber
+            $request->merge([
+                'assessment_id' => $batch->assessment_id,
+                'user_ids' => $validated['user_ids'],
             ]);
 
-            foreach ($users as $user) {
+            $assignmentController->destroy($request);
+        }
 
-                if ($count >= $capacity) {
-                    $batchNumber++;
-                    $count = 0;
-
-                    $batch = Batch::create([
-                        'name' => 'Batch ' . $batchNumber
-                    ]);
-                }
-
-                $user->update([
-                    'batch_id' => $batch->id
-                ]);
-
-                $count++;
-            }
-
-        });
-
-        return response()->json([
-            'message' => 'Batches rebalanced successfully'
-        ]);
+        return response()->json($batch);
     }
 }

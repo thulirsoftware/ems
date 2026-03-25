@@ -8,7 +8,7 @@ use Illuminate\Http\Request;
 
 class UserAssessmentController extends Controller
 {
-    // Upcoming assessments (not started and not ended yet)
+    // Upcoming assessments
     public function upcoming(Request $request)
     {
         $user = $request->user('users');
@@ -20,11 +20,33 @@ class UserAssessmentController extends Controller
             ->whereHas('assessment', function ($q) use ($today, $nowTime) {
                 $q->where('is_active', true)
                     ->where(function ($q2) use ($today, $nowTime) {
-                        $q2->where('publish_date', '>', $today)
-                            ->orWhere(function ($q3) use ($today, $nowTime) {
-                                $q3->where('publish_date', $today)
-                                    ->where('start_time', '>', $nowTime);
-                            });
+
+                        // normal assessments
+                        $q2->where(function ($q3) use ($today, $nowTime) {
+                            $q3->where('is_batch_wise', false)
+                                ->where(function ($q4) use ($today, $nowTime) {
+                                    $q4->where('publish_date', '>', $today)
+                                        ->orWhere(function ($q5) use ($today, $nowTime) {
+                                            $q5->where('publish_date', $today)
+                                                ->where('start_time', '>', $nowTime);
+                                        });
+                                });
+                        })
+
+                        // batch-wise
+                        ->orWhere(function ($q3) use ($today, $nowTime) {
+                            $q3->where('is_batch_wise', true)
+                                ->whereHas('batches', function ($b) use ($today, $nowTime) {
+                                    $b->where(function ($q4) use ($today, $nowTime) {
+                                        $q4->where('publish_date', '>', $today)
+                                            ->orWhere(function ($q5) use ($today, $nowTime) {
+                                                $q5->where('publish_date', $today)
+                                                    ->where('start_time', '>', $nowTime);
+                                            });
+                                    });
+                                });
+                        });
+
                     });
             })
             ->with('assessment')
@@ -34,7 +56,7 @@ class UserAssessmentController extends Controller
         return response()->json($assessments);
     }
 
-    // Today's assessments (previously upcoming)
+    // Today's assessments
     public function today(Request $request)
     {
         $user = $request->user('users');
@@ -45,8 +67,25 @@ class UserAssessmentController extends Controller
         $assessments = AssessmentAssignment::where('user_id', $user->id)
             ->whereHas('assessment', function ($q) use ($today, $nowTime) {
                 $q->where('is_active', true)
-                    ->where('publish_date', $today)
-                    ->where('start_time', '>', $nowTime);
+                    ->where(function ($q2) use ($today, $nowTime) {
+
+                        // normal
+                        $q2->where(function ($q3) use ($today, $nowTime) {
+                            $q3->where('is_batch_wise', false)
+                                ->where('publish_date', $today)
+                                ->where('start_time', '>', $nowTime);
+                        })
+
+                        // batch-wise
+                        ->orWhere(function ($q3) use ($today, $nowTime) {
+                            $q3->where('is_batch_wise', true)
+                                ->whereHas('batches', function ($b) use ($today, $nowTime) {
+                                    $b->where('publish_date', $today)
+                                        ->where('start_time', '>', $nowTime);
+                                });
+                        });
+
+                    });
             })
             ->with('assessment')
             ->get()
@@ -55,7 +94,7 @@ class UserAssessmentController extends Controller
         return response()->json($assessments);
     }
 
-    // Assessments user can take right now
+    // Running assessments
     public function running(Request $request)
     {
         $user = $request->user('users');
@@ -66,17 +105,34 @@ class UserAssessmentController extends Controller
         $assessments = AssessmentAssignment::where('user_id', $user->id)
             ->whereHas('assessment', function ($q) use ($today, $nowTime) {
                 $q->where('is_active', true)
-                    ->where('publish_date', $today)
-                    ->where('start_time', '<=', $nowTime)
-                    ->where('end_time', '>=', $nowTime);
+                    ->where(function ($q2) use ($today, $nowTime) {
+
+                        // normal
+                        $q2->where(function ($q3) use ($today, $nowTime) {
+                            $q3->where('is_batch_wise', false)
+                                ->where('publish_date', $today)
+                                ->where('start_time', '<=', $nowTime)
+                                ->where('end_time', '>=', $nowTime);
+                        })
+
+                        // batch-wise
+                        ->orWhere(function ($q3) use ($today, $nowTime) {
+                            $q3->where('is_batch_wise', true)
+                                ->whereHas('batches', function ($b) use ($today, $nowTime) {
+                                    $b->where('publish_date', $today)
+                                        ->where('start_time', '<=', $nowTime)
+                                        ->where('end_time', '>=', $nowTime);
+                                });
+                        });
+
+                    });
             })
-            // 🚫 exclude completed attempts
             ->whereNotExists(function ($q) use ($user) {
                 $q->selectRaw(1)
-                ->from('assessment_attempts')
-                ->whereColumn('assessment_attempts.assessment_id', 'assessment_assignments.assessment_id')
-                ->where('assessment_attempts.user_id', $user->id)
-                ->whereNotNull('assessment_attempts.submitted_at');
+                    ->from('assessment_attempts')
+                    ->whereColumn('assessment_attempts.assessment_id', 'assessment_assignments.assessment_id')
+                    ->where('assessment_attempts.user_id', $user->id)
+                    ->whereNotNull('assessment_attempts.submitted_at');
             })
             ->with('assessment')
             ->get()
@@ -119,11 +175,33 @@ class UserAssessmentController extends Controller
             ->whereNotIn('assessment_id', $attemptedIds)
             ->whereHas('assessment', function ($q) use ($today, $nowTime) {
                 $q->where(function ($q2) use ($today, $nowTime) {
-                    $q2->where('publish_date', '<', $today)
-                        ->orWhere(function ($q3) use ($today, $nowTime) {
-                            $q3->where('publish_date', $today)
-                                ->where('end_time', '<', $nowTime);
-                        });
+
+                    // normal
+                    $q2->where(function ($q3) use ($today, $nowTime) {
+                        $q3->where('is_batch_wise', false)
+                            ->where(function ($q4) use ($today, $nowTime) {
+                                $q4->where('publish_date', '<', $today)
+                                    ->orWhere(function ($q5) use ($today, $nowTime) {
+                                        $q5->where('publish_date', $today)
+                                            ->where('end_time', '<', $nowTime);
+                                    });
+                            });
+                    })
+
+                    // batch-wise
+                    ->orWhere(function ($q3) use ($today, $nowTime) {
+                        $q3->where('is_batch_wise', true)
+                            ->whereHas('batches', function ($b) use ($today, $nowTime) {
+                                $b->where(function ($q4) use ($today, $nowTime) {
+                                    $q4->where('publish_date', '<', $today)
+                                        ->orWhere(function ($q5) use ($today, $nowTime) {
+                                            $q5->where('publish_date', $today)
+                                                ->where('end_time', '<', $nowTime);
+                                        });
+                                });
+                            });
+                    });
+
                 });
             })
             ->with('assessment')
@@ -133,7 +211,7 @@ class UserAssessmentController extends Controller
         return response()->json($assessments);
     }
 
-    // Show one assessment only if assigned to user
+    // Show one assessment
     public function show(Request $request, $id)
     {
         $user = $request->user('users');

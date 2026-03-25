@@ -22,7 +22,8 @@ class Assessment extends Model
         'shuffle',
         'is_library',
         'has_negative',
-        'negative_marks'
+        'negative_marks',
+        'is_batch_wise'
     ];
 
     protected $hidden = [
@@ -45,5 +46,10 @@ class Assessment extends Model
     public function questions()
     {
         return $this->hasMany(AssessmentQuestion::class);
+    }
+
+    public function batches()
+    {
+        return $this->hasMany(\App\Models\Batch::class);
     }
 }

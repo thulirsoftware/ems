@@ -24,10 +24,5 @@ class User extends Authenticatable
         'deleted_at',
         'created_at',
         'updated_at',
-    ];
-
-    public function batch()
-    {
-        return $this->belongsTo(Batch::class);
-    }
+    ];    
 }

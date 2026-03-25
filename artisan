@@ -1,4 +1,4 @@
-#!/usr/bin/env php
+php artisan make:migration add_publish_and_time_fields_to_batches_table#!/usr/bin/env php
 <?php
 
 use Illuminate\Foundation\Application;

@@ -72,6 +72,7 @@ class AssessmentAssignmentController extends Controller
             'assessment_id' => 'required|exists:assessments,id',
             'user_ids' => 'required|array|min:1',
             'user_ids.*' => 'exists:users,id',
+            'batch_id' => 'nullable|exists:batches,id',
         ]);
 
         $assessment = Assessment::where('id', $validated['assessment_id'])
@@ -84,26 +85,60 @@ class AssessmentAssignmentController extends Controller
             ], 404);
         }
 
+        $batch = null;
+
+        if (!empty($validated['batch_id'])) {
+            $batch = \App\Models\Batch::where('id', $validated['batch_id'])
+                ->where('assessment_id', $assessment->id)
+                ->first();
+        }
+
         $assignments = [];
         $conflicts = [];
 
         foreach ($validated['user_ids'] as $userId) {
 
             // Check time conflict before assigning
-            $conflict = \DB::table('assessment_assignments as aa')
-                ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
-                ->where('aa.user_id', $userId)
-                ->where('a.id', '!=', $assessment->id)
-                ->whereNotNull('a.publish_date')
-                ->whereDate('a.publish_date', $assessment->publish_date)
-                ->whereNotNull('a.start_time')
-                ->whereNotNull('a.end_time')
-                ->where(function ($q) use ($assessment) {
-                    $q->where('a.start_time', '<', $assessment->end_time)
-                        ->where('a.end_time', '>', $assessment->start_time);
-                })
-                ->select('a.id', 'a.title')
-                ->first();
+            if ($assessment->is_batch_wise) {
+
+                if ($batch->publish_date && $batch->start_time && $batch->end_time) {
+                    $conflict = \DB::table('assessment_assignments as aa')
+                        ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
+                        ->join('batches as b', 'b.assessment_id', '=', 'a.id')
+                        ->where('aa.user_id', $userId)
+                        ->where('a.id', '!=', $assessment->id)
+
+                        ->whereDate('b.publish_date', $batch->publish_date)
+
+                        ->where(function ($q) use ($batch) {
+                            $q->where('b.start_time', '<', $batch->end_time)
+                                ->where('b.end_time', '>', $batch->start_time);
+                        })
+
+                        ->select('a.id', 'a.title')
+                        ->first();
+                } else {
+                    $conflict = null;
+                }
+
+            } else {
+
+                // existing logic unchanged
+                $conflict = \DB::table('assessment_assignments as aa')
+                    ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
+                    ->where('aa.user_id', $userId)
+                    ->where('a.id', '!=', $assessment->id)
+                    ->whereNotNull('a.publish_date')
+                    ->whereDate('a.publish_date', $assessment->publish_date)
+                    ->whereNotNull('a.start_time')
+                    ->whereNotNull('a.end_time')
+                    ->where(function ($q) use ($assessment) {
+                        $q->where('a.start_time', '<', $assessment->end_time)
+                            ->where('a.end_time', '>', $assessment->start_time);
+                    })
+                    ->select('a.id', 'a.title')
+                    ->first();
+            }
 
             if ($conflict) {
                 $conflicts[] = [

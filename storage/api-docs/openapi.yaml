@@ -192,7 +192,7 @@ paths:
     get:
       tags: [Admin Batches]
       summary: Get all batches
-      description: Retrieve all batches with user count
+      description: Retrieve all batches for admin view
       responses:
         200:
           description: List of batches
@@ -207,73 +207,143 @@ paths:
                       type: integer
                     name:
                       type: string
-                    users_count:
+                    publish_date:
+                      type: string
+                      format: date
+                    start_time:
+                      type: string
+                      format: time
+                    end_time:
+                      type: string
+                      format: time
+                    assessment_id:
                       type: integer
+                    capacity:
+                      type: integer
+                    user_ids:
+                      type: array
+                      items:
+                        type: integer
         401:
           description: Unauthenticated
 
-
-  /admin/batches/unassigned-users:
-    get:
+    post:
       tags: [Admin Batches]
-      summary: Get unassigned users
-      description: Retrieve users that are not assigned to any batch
+      summary: Create batch
+      description: Create a new batch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, assessment_id, capacity]
+              properties:
+                name:
+                  type: string
+                publish_date:
+                  type: string
+                  format: date
+                start_time:
+                  type: string
+                  format: time
+                end_time:
+                  type: string
+                  format: time
+                assessment_id:
+                  type: integer
+                capacity:
+                  type: integer
       responses:
-        200:
-          description: List of unassigned users
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    id:
-                      type: integer
-                    name:
-                      type: string
-                    email:
-                      type: string
+        201:
+          description: Batch created
         401:
           description: Unauthenticated
 
 
-  /admin/batches/{batch_id}/users:
+  /admin/batches/{id}:
     get:
       tags: [Admin Batches]
-      summary: Get users in a batch
-      description: Retrieve users belonging to a specific batch
+      summary: Get batch
+      description: Retrieve a single batch by ID
       parameters:
-        - name: batch_id
+        - name: id
           in: path
           required: true
           schema:
             type: integer
       responses:
         200:
-          description: Users in batch
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    id:
-                      type: integer
-                    name:
-                      type: string
-                    email:
-                      type: string
+          description: Batch details
+        401:
+          description: Unauthenticated
+
+    put:
+      tags: [Admin Batches]
+      summary: Update batch
+      description: Update an existing batch
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                publish_date:
+                  type: string
+                  format: date
+                start_time:
+                  type: string
+                  format: time
+                end_time:
+                  type: string
+                  format: time
+                assessment_id:
+                  type: integer
+                capacity:
+                  type: integer
+      responses:
+        200:
+          description: Batch updated
+        401:
+          description: Unauthenticated
+
+    delete:
+      tags: [Admin Batches]
+      summary: Delete batch
+      description: Delete a batch by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Batch deleted
         401:
           description: Unauthenticated
 
 
-  /admin/batches/add-users:
+  /admin/batches/{id}/users:
     post:
       tags: [Admin Batches]
-      summary: Add users to batches
-      description: Assign users to batches automatically based on capacity
+      summary: Add users to batch
+      description: Add multiple users to a batch
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
       requestBody:
         required: true
         content:
@@ -288,42 +358,22 @@ paths:
                     type: integer
       responses:
         200:
-          description: Users assigned successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
+          description: Users added to batch
+        422:
+          description: Capacity exceeded or validation error
         401:
           description: Unauthenticated
 
-
-  /admin/batches/assign-unassigned:
-    post:
+    delete:
       tags: [Admin Batches]
-      summary: Assign all unassigned users
-      description: Automatically distribute all unassigned users into batches based on capacity
-      responses:
-        200:
-          description: Unassigned users assigned
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-        401:
-          description: Unauthenticated
-
-
-  /admin/batches/remove-users:
-    post:
-      tags: [Admin Batches]
-      summary: Remove users from batches
-      description: Remove selected users from their batches
+      summary: Remove users from batch
+      description: Remove users from a batch
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
       requestBody:
         required: true
         content:
@@ -339,83 +389,9 @@ paths:
       responses:
         200:
           description: Users removed from batch
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
         401:
           description: Unauthenticated
 
-
-  /admin/batches/capacity:
-    get:
-      tags: [Admin Batches]
-      summary: Get batch capacity
-      description: Retrieve the configured batch capacity
-      responses:
-        200:
-          description: Batch capacity
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  batch_capacity:
-                    type: integer
-        401:
-          description: Unauthenticated
-
-    post:
-      tags: [Admin Batches]
-      summary: Update batch capacity
-      description: Update the maximum number of users allowed per batch
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [batch_capacity]
-              properties:
-                batch_capacity:
-                  type: integer
-      responses:
-        200:
-          description: Batch capacity updated
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                  batch_capacity:
-                    type: integer
-        401:
-          description: Unauthenticated
-
-
-  /admin/batches/rebalance:
-    post:
-      tags: [Admin Batches]
-      summary: Rebalance batches
-      description: Recreate batches and redistribute all users based on batch capacity
-      responses:
-        200:
-          description: Batches rebalanced successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-        401:
-          description: Unauthenticated
-          
   /admin/assessments:
     get:
       tags: [Admin Assessments]
@@ -457,6 +433,10 @@ paths:
                   type: boolean
                 negative_marks:
                   type: number
+                difficulty_level:
+                  type: string
+                is_batch_wise:
+                  type: boolean
       responses:
         201:
           description: Assessment created
@@ -524,6 +504,10 @@ paths:
                 negative_marks:
                   type: number
                   example: 0.5
+                difficulty_level:
+                  type: string
+                is_batch_wise:
+                  type: boolean
       responses:
         200:
           description: Assessment updated
