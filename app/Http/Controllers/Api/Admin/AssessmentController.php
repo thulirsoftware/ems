@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Assessment;
+use App\Models\Batch;
 use Illuminate\Http\Request;
 
 class AssessmentController extends Controller
@@ -12,28 +13,28 @@ class AssessmentController extends Controller
     {
         $admin = $request->user('admins');
 
-        $today = app_now()->toDateString();
-        $nowTime = app_now()->toTimeString();
-
         $assessments = Assessment::where('admin_id', $admin->id)
             ->latest()
-            ->get()
-            ->map(function ($assessment) use ($today, $nowTime) {
+            ->get();
 
-                $isFinished =
-                    $assessment->publish_date < $today ||
-                    (
-                        $assessment->publish_date == $today &&
-                        $assessment->end_time < $nowTime
-                    );
+        $result = [];
 
-                return [
+        foreach ($assessments as $assessment) {
+
+            $batches = Batch::where('assessment_id', $assessment->id)->get();
+
+            foreach ($batches as $batch) {
+                $result[] = [
                     ...$assessment->toArray(),
-                    'is_finished' => $isFinished
+                    'batch_id' => $batch->id,
+                    'publish_date' => $batch->publish_date,
+                    'start_time' => $batch->start_time,
+                    'end_time' => $batch->end_time,
                 ];
-            });
+            }
+        }
 
-        return response()->json($assessments);
+        return response()->json($result);
     }
 
     public function store(Request $request)
@@ -42,7 +43,6 @@ class AssessmentController extends Controller
             'assessment_type_id' => 'required|exists:assessment_types,id',
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-
             'is_batch_wise' => 'required|boolean',
 
             'publish_date' => 'required_if:is_batch_wise,false|date',
@@ -62,6 +62,18 @@ class AssessmentController extends Controller
             ...$validated,
         ]);
 
+        // create default batch for individual
+        if (!$assessment->is_batch_wise) {
+            Batch::create([
+                'name' => 'individual_batch_' . $assessment->id,
+                'publish_date' => $assessment->publish_date,
+                'start_time' => $assessment->start_time,
+                'end_time' => $assessment->end_time,
+                'assessment_id' => $assessment->id,
+                'capacity' => null,
+            ]);
+        }
+
         return response()->json($assessment, 201);
     }
 
@@ -73,7 +85,12 @@ class AssessmentController extends Controller
             ->where('id', $id)
             ->firstOrFail();
 
-        return response()->json($assessment);
+        $batches = Batch::where('assessment_id', $assessment->id)->get();
+
+        return response()->json([
+            ...$assessment->toArray(),
+            'batches' => $batches
+        ]);
     }
 
     public function update(Request $request, $id)
@@ -102,6 +119,21 @@ class AssessmentController extends Controller
 
         $assessment->update($validated);
 
+        // sync default batch for individual
+        if (!$assessment->is_batch_wise) {
+            $batch = Batch::where('assessment_id', $assessment->id)
+                ->where('name', 'individual_batch_' . $assessment->id)
+                ->first();
+
+            if ($batch) {
+                $batch->update([
+                    'publish_date' => $assessment->publish_date,
+                    'start_time' => $assessment->start_time,
+                    'end_time' => $assessment->end_time,
+                ]);
+            }
+        }
+
         return response()->json($assessment);
     }
 
@@ -124,10 +156,29 @@ class AssessmentController extends Controller
     {
         $admin = $request->user('admins');
 
-        return Assessment::where('admin_id', $admin->id)
+        $assessments = Assessment::where('admin_id', $admin->id)
             ->where('is_library', true)
             ->latest()
             ->get();
+
+        $result = [];
+
+        foreach ($assessments as $assessment) {
+
+            $batches = Batch::where('assessment_id', $assessment->id)->get();
+
+            foreach ($batches as $batch) {
+                $result[] = [
+                    ...$assessment->toArray(),
+                    'batch_id' => $batch->id,
+                    'publish_date' => $batch->publish_date,
+                    'start_time' => $batch->start_time,
+                    'end_time' => $batch->end_time,
+                ];
+            }
+        }
+
+        return response()->json($result);
     }
 
     public function upcoming(Request $request)
@@ -139,12 +190,32 @@ class AssessmentController extends Controller
 
         $assessments = Assessment::where('admin_id', $admin->id)
             ->where('is_active', true)
-            ->whereDate('publish_date', $today)
-            ->whereTime('start_time', '>', $nowTime)
-            ->orderBy('start_time')
             ->get();
 
-        return response()->json($assessments);
+        $result = [];
+
+        foreach ($assessments as $assessment) {
+
+            $batches = \App\Models\Batch::where('assessment_id', $assessment->id)->get();
+
+            foreach ($batches as $batch) {
+
+                if (
+                    $batch->publish_date == $today &&
+                    $batch->start_time > $nowTime
+                ) {
+                    $result[] = [
+                        ...$assessment->toArray(),
+                        'batch_id' => $batch->id,
+                        'publish_date' => $batch->publish_date,
+                        'start_time' => $batch->start_time,
+                        'end_time' => $batch->end_time,
+                    ];
+                }
+            }
+        }
+
+        return response()->json($result);
     }
 
     public function running(Request $request)
@@ -156,12 +227,32 @@ class AssessmentController extends Controller
 
         $assessments = Assessment::where('admin_id', $admin->id)
             ->where('is_active', true)
-            ->whereDate('publish_date', $today)
-            ->whereTime('start_time', '<=', $nowTime)
-            ->whereTime('end_time', '>=', $nowTime)
-            ->orderBy('start_time')
             ->get();
 
-        return response()->json($assessments);
+        $result = [];
+
+        foreach ($assessments as $assessment) {
+
+            $batches = Batch::where('assessment_id', $assessment->id)->get();
+
+            foreach ($batches as $batch) {
+
+                if (
+                    $batch->publish_date == $today &&
+                    $batch->start_time <= $nowTime &&
+                    $batch->end_time >= $nowTime
+                ) {
+                    $result[] = [
+                        ...$assessment->toArray(),
+                        'batch_id' => $batch->id,
+                        'publish_date' => $batch->publish_date,
+                        'start_time' => $batch->start_time,
+                        'end_time' => $batch->end_time,
+                    ];
+                }
+            }
+        }
+
+        return response()->json($result);
     }
 }

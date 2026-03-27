@@ -13,6 +13,7 @@ class AssessmentAssignment extends Model
         'assessment_id',
         'user_id',
         'assigned_at',
+        'batch_id',
     ];
 
     protected $hidden = [
@@ -21,13 +22,21 @@ class AssessmentAssignment extends Model
         'updated_at',
     ];
 
+    // Assignment → Assessment
     public function assessment()
     {
         return $this->belongsTo(Assessment::class);
     }
 
+    // Assignment → User
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    // Assignment → Batch
+    public function batch()
+    {
+        return $this->belongsTo(Batch::class);
     }
 }

@@ -4,11 +4,49 @@ namespace App\Http\Controllers\Api\User;
 
 use App\Http\Controllers\Controller;
 use App\Models\AssessmentAssignment;
+use App\Models\Batch;
 use Illuminate\Http\Request;
 
 class UserAssessmentController extends Controller
 {
-    // Upcoming assessments
+    // Helper to preload batches
+    private function getBatchesMap($assignments)
+    {
+        $batchIds = $assignments->pluck('batch_id')->filter()->unique();
+
+        return Batch::whereIn('id', $batchIds)->get()->keyBy('id');
+    }
+
+    private function resolveBatch($assignment, $batches)
+    {
+        $assessment = $assignment->assessment;
+
+        if ($assessment->is_batch_wise) {
+            return $batches[$assignment->batch_id] ?? null;
+        }
+
+        return Batch::where('assessment_id', $assessment->id)
+            ->where('name', 'individual_batch_' . $assessment->id)
+            ->first();
+    }
+
+    private function mapWithBatch($assignments, $batches)
+    {
+        return $assignments->map(function ($assignment) use ($batches) {
+
+            $assessment = $assignment->assessment;
+            $batch = $this->resolveBatch($assignment, $batches);
+
+            return [
+                ...$assessment->toArray(),
+                'batch_id' => $batch?->id,
+                'publish_date' => $batch?->publish_date,
+                'start_time' => $batch?->start_time,
+                'end_time' => $batch?->end_time,
+            ];
+        })->values();
+    }
+
     public function upcoming(Request $request)
     {
         $user = $request->user('users');
@@ -16,47 +54,33 @@ class UserAssessmentController extends Controller
         $today = app_now()->toDateString();
         $nowTime = app_now()->toTimeString();
 
-        $assessments = AssessmentAssignment::where('user_id', $user->id)
-            ->whereHas('assessment', function ($q) use ($today, $nowTime) {
-                $q->where('is_active', true)
-                    ->where(function ($q2) use ($today, $nowTime) {
-
-                        // normal assessments
-                        $q2->where(function ($q3) use ($today, $nowTime) {
-                            $q3->where('is_batch_wise', false)
-                                ->where(function ($q4) use ($today, $nowTime) {
-                                    $q4->where('publish_date', '>', $today)
-                                        ->orWhere(function ($q5) use ($today, $nowTime) {
-                                            $q5->where('publish_date', $today)
-                                                ->where('start_time', '>', $nowTime);
-                                        });
-                                });
-                        })
-
-                        // batch-wise
-                        ->orWhere(function ($q3) use ($today, $nowTime) {
-                            $q3->where('is_batch_wise', true)
-                                ->whereHas('batches', function ($b) use ($today, $nowTime) {
-                                    $b->where(function ($q4) use ($today, $nowTime) {
-                                        $q4->where('publish_date', '>', $today)
-                                            ->orWhere(function ($q5) use ($today, $nowTime) {
-                                                $q5->where('publish_date', $today)
-                                                    ->where('start_time', '>', $nowTime);
-                                            });
-                                    });
-                                });
-                        });
-
-                    });
-            })
+        $assignments = AssessmentAssignment::where('user_id', $user->id)
             ->with('assessment')
-            ->get()
-            ->pluck('assessment');
+            ->get();
 
-        return response()->json($assessments);
+        $batches = $this->getBatchesMap($assignments);
+
+        $filtered = $assignments->filter(function ($assignment) use ($today, $nowTime, $batches) {
+
+            $assessment = $assignment->assessment;
+
+            if (!$assessment->is_active) return false;
+
+            $batch = $this->resolveBatch($assignment, $batches);
+
+            if (!$batch) return false;
+
+            return (
+                $batch->publish_date > $today
+            ) || (
+                $batch->publish_date == $today &&
+                $batch->start_time > $nowTime
+            );
+        });
+
+        return response()->json($this->mapWithBatch($filtered, $batches));
     }
 
-    // Today's assessments
     public function today(Request $request)
     {
         $user = $request->user('users');
@@ -64,37 +88,31 @@ class UserAssessmentController extends Controller
         $today = app_now()->toDateString();
         $nowTime = app_now()->toTimeString();
 
-        $assessments = AssessmentAssignment::where('user_id', $user->id)
-            ->whereHas('assessment', function ($q) use ($today, $nowTime) {
-                $q->where('is_active', true)
-                    ->where(function ($q2) use ($today, $nowTime) {
-
-                        // normal
-                        $q2->where(function ($q3) use ($today, $nowTime) {
-                            $q3->where('is_batch_wise', false)
-                                ->where('publish_date', $today)
-                                ->where('start_time', '>', $nowTime);
-                        })
-
-                        // batch-wise
-                        ->orWhere(function ($q3) use ($today, $nowTime) {
-                            $q3->where('is_batch_wise', true)
-                                ->whereHas('batches', function ($b) use ($today, $nowTime) {
-                                    $b->where('publish_date', $today)
-                                        ->where('start_time', '>', $nowTime);
-                                });
-                        });
-
-                    });
-            })
+        $assignments = AssessmentAssignment::where('user_id', $user->id)
             ->with('assessment')
-            ->get()
-            ->pluck('assessment');
+            ->get();
 
-        return response()->json($assessments);
+        $batches = $this->getBatchesMap($assignments);
+
+        $filtered = $assignments->filter(function ($assignment) use ($today, $nowTime, $batches) {
+
+            $assessment = $assignment->assessment;
+
+            if (!$assessment->is_active) return false;
+
+            $batch = $this->resolveBatch($assignment, $batches);
+
+            if (!$batch) return false;
+
+            return (
+                $batch->publish_date == $today &&
+                $batch->start_time > $nowTime
+            );
+        });
+
+        return response()->json($this->mapWithBatch($filtered, $batches));
     }
 
-    // Running assessments
     public function running(Request $request)
     {
         $user = $request->user('users');
@@ -102,64 +120,65 @@ class UserAssessmentController extends Controller
         $today = app_now()->toDateString();
         $nowTime = app_now()->toTimeString();
 
-        $assessments = AssessmentAssignment::where('user_id', $user->id)
-            ->whereHas('assessment', function ($q) use ($today, $nowTime) {
-                $q->where('is_active', true)
-                    ->where(function ($q2) use ($today, $nowTime) {
-
-                        // normal
-                        $q2->where(function ($q3) use ($today, $nowTime) {
-                            $q3->where('is_batch_wise', false)
-                                ->where('publish_date', $today)
-                                ->where('start_time', '<=', $nowTime)
-                                ->where('end_time', '>=', $nowTime);
-                        })
-
-                        // batch-wise
-                        ->orWhere(function ($q3) use ($today, $nowTime) {
-                            $q3->where('is_batch_wise', true)
-                                ->whereHas('batches', function ($b) use ($today, $nowTime) {
-                                    $b->where('publish_date', $today)
-                                        ->where('start_time', '<=', $nowTime)
-                                        ->where('end_time', '>=', $nowTime);
-                                });
-                        });
-
-                    });
-            })
-            ->whereNotExists(function ($q) use ($user) {
-                $q->selectRaw(1)
-                    ->from('assessment_attempts')
-                    ->whereColumn('assessment_attempts.assessment_id', 'assessment_assignments.assessment_id')
-                    ->where('assessment_attempts.user_id', $user->id)
-                    ->whereNotNull('assessment_attempts.submitted_at');
-            })
+        $assignments = AssessmentAssignment::where('user_id', $user->id)
             ->with('assessment')
-            ->get()
-            ->pluck('assessment');
+            ->get();
 
-        return response()->json($assessments);
+        $batches = $this->getBatchesMap($assignments);
+
+        $filtered = $assignments->filter(function ($assignment) use ($today, $nowTime, $user, $batches) {
+
+            $assessment = $assignment->assessment;
+
+            if (!$assessment->is_active) return false;
+
+            $batch = $this->resolveBatch($assignment, $batches);
+
+            if (!$batch) return false;
+
+            $isRunning =
+                $batch->publish_date == $today &&
+                $batch->start_time <= $nowTime &&
+                $batch->end_time >= $nowTime;
+
+            if (!$isRunning) return false;
+
+            return !\DB::table('assessment_attempts')
+                ->where('assessment_id', $assessment->id)
+                ->where('batch_id', $assignment->batch_id) // ✅ FIX
+                ->where('user_id', $user->id)
+                ->whereNotNull('submitted_at')
+                ->exists();
+        });
+
+        return response()->json($this->mapWithBatch($filtered, $batches));
     }
 
-    // Completed assessments
     public function completed(Request $request)
     {
         $user = $request->user('users');
 
-        $assessmentIds = \DB::table('assessment_attempts')
+        $attempts = \DB::table('assessment_attempts')
             ->where('user_id', $user->id)
-            ->pluck('assessment_id');
+            ->select('assessment_id', 'batch_id')
+            ->get();
 
-        $assessments = AssessmentAssignment::where('user_id', $user->id)
-            ->whereIn('assessment_id', $assessmentIds)
+        $assignments = AssessmentAssignment::where('user_id', $user->id)
             ->with('assessment')
-            ->get()
-            ->pluck('assessment');
+            ->get();
 
-        return response()->json($assessments);
+        $batches = $this->getBatchesMap($assignments);
+
+        $filtered = $assignments->filter(function ($assignment) use ($attempts) {
+            return $attempts->contains(function ($a) use ($assignment) {
+                return $a->assessment_id == $assignment->assessment_id
+                    && $a->batch_id == $assignment->batch_id;
+            });
+        });
+
+        return response()->json($this->mapWithBatch($filtered, $batches));
     }
 
-    // Missed assessments
     public function missed(Request $request)
     {
         $user = $request->user('users');
@@ -167,61 +186,49 @@ class UserAssessmentController extends Controller
         $today = app_now()->toDateString();
         $nowTime = app_now()->toTimeString();
 
-        $attemptedIds = \DB::table('assessment_attempts')
+        $attempts = \DB::table('assessment_attempts')
             ->where('user_id', $user->id)
-            ->pluck('assessment_id');
+            ->select('assessment_id', 'batch_id')
+            ->get();
 
-        $assessments = AssessmentAssignment::where('user_id', $user->id)
-            ->whereNotIn('assessment_id', $attemptedIds)
-            ->whereHas('assessment', function ($q) use ($today, $nowTime) {
-                $q->where(function ($q2) use ($today, $nowTime) {
-
-                    // normal
-                    $q2->where(function ($q3) use ($today, $nowTime) {
-                        $q3->where('is_batch_wise', false)
-                            ->where(function ($q4) use ($today, $nowTime) {
-                                $q4->where('publish_date', '<', $today)
-                                    ->orWhere(function ($q5) use ($today, $nowTime) {
-                                        $q5->where('publish_date', $today)
-                                            ->where('end_time', '<', $nowTime);
-                                    });
-                            });
-                    })
-
-                    // batch-wise
-                    ->orWhere(function ($q3) use ($today, $nowTime) {
-                        $q3->where('is_batch_wise', true)
-                            ->whereHas('batches', function ($b) use ($today, $nowTime) {
-                                $b->where(function ($q4) use ($today, $nowTime) {
-                                    $q4->where('publish_date', '<', $today)
-                                        ->orWhere(function ($q5) use ($today, $nowTime) {
-                                            $q5->where('publish_date', $today)
-                                                ->where('end_time', '<', $nowTime);
-                                        });
-                                });
-                            });
-                    });
-
-                });
-            })
+        $assignments = AssessmentAssignment::where('user_id', $user->id)
             ->with('assessment')
-            ->get()
-            ->pluck('assessment');
+            ->get();
 
-        return response()->json($assessments);
+        $batches = $this->getBatchesMap($assignments);
+
+        $filtered = $assignments->filter(function ($assignment) use ($attempts, $today, $nowTime, $batches) {
+
+            $batch = $this->resolveBatch($assignment, $batches);
+
+            if (!$batch) return false;
+
+            $isMissed =
+                ($batch->publish_date < $today) ||
+                ($batch->publish_date == $today && $batch->end_time < $nowTime);
+
+            if (!$isMissed) return false;
+
+            return !$attempts->contains(function ($a) use ($assignment) {
+                return $a->assessment_id == $assignment->assessment_id
+                    && $a->batch_id == $assignment->batch_id;
+            });
+        });
+
+        return response()->json($this->mapWithBatch($filtered, $batches));
     }
 
-    // Show one assessment
     public function show(Request $request, $id)
     {
         $user = $request->user('users');
 
-        $assessment = AssessmentAssignment::where('user_id', $user->id)
+        $assignment = AssessmentAssignment::where('user_id', $user->id)
             ->where('assessment_id', $id)
             ->with('assessment')
-            ->firstOrFail()
-            ->assessment;
+            ->firstOrFail();
 
-        return response()->json($assessment);
+        $batches = $this->getBatchesMap(collect([$assignment]));
+
+        return response()->json($this->mapWithBatch(collect([$assignment]), $batches)->first());
     }
 }

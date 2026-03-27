@@ -17,10 +17,23 @@ class Batch extends Model
         'is_batch_wise',
         'assessment_id',
         'capacity',
-        'user_ids',
     ];
 
-    protected $casts = [
-        'user_ids' => 'array'
-    ];
+    // Batch → Assessment
+    public function assessment()
+    {
+        return $this->belongsTo(Assessment::class);
+    }
+
+    // Batch → Assignments
+    public function assignments()
+    {
+        return $this->hasMany(AssessmentAssignment::class);
+    }
+
+    // Batch → Attempts
+    public function attempts()
+    {
+        return $this->hasMany(AssessmentAttempt::class);
+    }
 }

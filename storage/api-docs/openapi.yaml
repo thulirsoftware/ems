@@ -260,7 +260,6 @@ paths:
         401:
           description: Unauthenticated
 
-
   /admin/batches/{id}:
     get:
       tags: [Admin Batches]
@@ -331,9 +330,81 @@ paths:
           description: Batch deleted
         401:
           description: Unauthenticated
+          
+  /admin/batches/assessment/{assessment_id}:
+    get:
+      tags: [Admin Batches]
+      summary: Get batches by assessment
+      description: Fetch all batches belonging to a specific assessment owned by the admin
+      parameters:
+        - name: assessment_id
+          in: path
+          required: true
+          description: Assessment ID
+          schema:
+            type: integer
+      responses:
+        200:
+          description: List of batches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                      example: 1
+                    name:
+                      type: string
+                      example: "Batch A"
+                    assessment_id:
+                      type: integer
+                      example: 10
+                    publish_date:
+                      type: string
+                      format: date
+                      nullable: true
+                    start_time:
+                      type: string
+                      nullable: true
+                    end_time:
+                      type: string
+                      nullable: true
 
+        404:
+          description: Assessment not found or not owned by admin
 
   /admin/batches/{id}/users:
+    get:
+      tags: [Admin Batches]
+      summary: Get users from batch
+      description: Get users assigned to a specific batch
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Batch ID
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Users fetched successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                      example: 1
+                    name:
+                      type: string
+                      example: "John Doe"
+
     post:
       tags: [Admin Batches]
       summary: Add users to batch
@@ -898,6 +969,14 @@ paths:
           required: true
           schema:
             type: integer
+
+        - name: batch_id
+          in: query
+          required: false
+          description: Required if the assessment is batch-wise
+          schema:
+            type: integer
+
       responses:
         200:
           description: List of users with assignment status
@@ -910,15 +989,35 @@ paths:
                   properties:
                     user_id:
                       type: integer
+                      example: 1
+
                     name:
                       type: string
+                      example: "John Doe"
+
                     assigned:
                       type: boolean
+                      example: true
+
+                    has_time_conflict:
+                      type: boolean
+                      example: false
+
+                    conflicting_assessment_id:
+                      type: integer
+                      nullable: true
+                      example: null
+
+                    conflicting_assessment_title:
+                      type: string
+                      nullable: true
+                      example: null
+
         404:
           description: Assessment not found or not owned by admin
-        422:
-          description: Validation error
 
+        422:
+          description: Validation error (e.g., missing batch_id for batch-wise or invalid batch)
 
   /admin/assignments:
     post:
@@ -988,10 +1087,31 @@ paths:
   /admin/results/finished:
     get:
       tags: [Admin Assessment Results]
-      summary: Get finished assessments
+      summary: Get finished assessments (batch-wise)
       responses:
         200:
           description: List of finished assessments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    title:
+                      type: string
+                    batch_id:
+                      type: integer
+                    publish_date:
+                      type: string
+                      format: date
+                    start_time:
+                      type: string
+                    end_time:
+                      type: string
+
 
   /admin/results/{assessment_id}/users:
     get:
@@ -1003,9 +1123,33 @@ paths:
           required: true
           schema:
             type: integer
+
+        - name: batch_id
+          in: query
+          required: false
+          description: Required for batch-wise assessments
+          schema:
+            type: integer
+
       responses:
         200:
-          description: List of users with attempted flag
+          description: List of users with attempt status
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    user_id:
+                      type: integer
+                    name:
+                      type: string
+                    attempted:
+                      type: boolean
+                    grade_pending:
+                      type: boolean
+
 
   /admin/results/{assessment_id}/user/{user_id}:
     get:
@@ -1017,18 +1161,77 @@ paths:
           required: true
           schema:
             type: integer
+
         - name: user_id
           in: path
           required: true
           schema:
             type: integer
+
+        - name: batch_id
+          in: query
+          required: false
+          schema:
+            type: integer
+
       responses:
         200:
           description: User result details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assessment_id:
+                    type: integer
+                  batch_id:
+                    type: integer
+                  user_id:
+                    type: integer
+                  score:
+                    type: integer
+                  total_marks:
+                    type: integer
+                  percentage:
+                    type: integer
+                  correct:
+                    type: integer
+                  wrong:
+                    type: integer
+                  unanswered:
+                    type: integer
+                  questions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        type:
+                          type: string
+                        question_text:
+                          type: string
+                        options:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id:
+                                type: integer
+                              option:
+                                type: string
+                        user_answer:
+                          type: string
+                          nullable: true
+                        is_correct:
+                          type: boolean
+                          nullable: true
+
         400:
           description: User has not submitted the assessment
         403:
           description: Assessment results are not available yet
+
 
   /admin/results/{assessment_id}/user/{user_id}/answers:
     get:
@@ -1040,16 +1243,63 @@ paths:
           required: true
           schema:
             type: integer
+
         - name: user_id
           in: path
           required: true
           schema:
             type: integer
+
+        - name: batch_id
+          in: query
+          required: false
+          schema:
+            type: integer
+
       responses:
         200:
           description: Questions with user answers for grading
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assessment_id:
+                    type: integer
+                  batch_id:
+                    type: integer
+                  user_id:
+                    type: integer
+                  questions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        question_id:
+                          type: integer
+                        type:
+                          type: string
+                        question_text:
+                          type: string
+                        options:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              id:
+                                type: integer
+                              option:
+                                type: string
+                        user_answer:
+                          type: string
+                          nullable: true
+                        is_correct:
+                          type: boolean
+                          nullable: true
+
         400:
           description: User has not submitted or already evaluated
+
 
   /admin/results/{assessment_id}/user/{user_id}/question/{question_id}/grade:
     post:
@@ -1061,16 +1311,25 @@ paths:
           required: true
           schema:
             type: integer
+
         - name: user_id
           in: path
           required: true
           schema:
             type: integer
+
         - name: question_id
           in: path
           required: true
           schema:
             type: integer
+
+        - name: batch_id
+          in: query
+          required: false
+          schema:
+            type: integer
+
       requestBody:
         required: true
         content:
@@ -1083,9 +1342,27 @@ paths:
                 is_correct:
                   type: boolean
                   example: true
+
       responses:
         200:
-          description: Answer graded successfully
+          description: Answer graded response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  score:
+                    type: string
+                    nullable: true
+                  graded:
+                    type: integer
+                    nullable: true
+                  total:
+                    type: integer
+                    nullable: true
+
         400:
           description: Invalid grading request
 

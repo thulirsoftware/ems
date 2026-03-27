@@ -4,19 +4,41 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Batch;
+use App\Models\Assessment;
+use App\Models\AssessmentAssignment;
+use App\Models\User;
 use Illuminate\Http\Request;
 
 class AdminBatchController extends Controller
 {
-    // Get all batches
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(Batch::all());
+        $admin = $request->user('admins');
+
+        return response()->json(
+            Batch::whereHas('assessment', function ($q) use ($admin) {
+                $q->where('admin_id', $admin->id);
+            })->get()
+        );
     }
 
-    // Store new batch
+    public function getBatchesByAssessment(Request $request, $assessment_id)
+    {
+        $admin = $request->user('admins');
+
+        $assessment = Assessment::where('id', $assessment_id)
+            ->where('admin_id', $admin->id)
+            ->firstOrFail();
+
+        $batches = Batch::where('assessment_id', $assessment->id)->get();
+
+        return response()->json($batches);
+    }
+
     public function store(Request $request)
     {
+        $admin = $request->user('admins');
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'publish_date' => 'required|date',
@@ -26,116 +48,193 @@ class AdminBatchController extends Controller
             'capacity' => 'required|integer|min:1',
         ]);
 
-        $batch = Batch::create($validated);
+        $assessment = Assessment::where('id', $validated['assessment_id'])
+            ->where('admin_id', $admin->id)
+            ->firstOrFail();
 
-        return response()->json($batch, 201);
+        $conflict = Batch::where('assessment_id', $assessment->id)
+            ->whereDate('publish_date', $validated['publish_date'])
+            ->where(function ($q) use ($validated) {
+                $q->where('start_time', '<', $validated['end_time'])
+                    ->where('end_time', '>', $validated['start_time']);
+            })
+            ->exists();
+
+        if ($conflict) {
+            return response()->json(['message' => 'Batch time conflict'], 422);
+        }
+
+        if (!$assessment->is_batch_wise) {
+            $exists = Batch::where('assessment_id', $assessment->id)
+                ->where('name', 'individual_batch_' . $assessment->id)
+                ->exists();
+
+            if ($exists) {
+                return response()->json(['message' => 'Default batch exists'], 422);
+            }
+        }
+
+        return response()->json(Batch::create($validated), 201);
     }
 
-    // Get single batch
-    public function show($id)
+    public function show(Request $request, $id)
     {
-        return response()->json(Batch::findOrFail($id));
+        $admin = $request->user('admins');
+
+        $batch = Batch::where('id', $id)
+            ->whereHas('assessment', function ($q) use ($admin) {
+                $q->where('admin_id', $admin->id);
+            })
+            ->firstOrFail();
+
+        return response()->json($batch);
     }
 
-    // Update batch
     public function update(Request $request, $id)
     {
-        $batch = Batch::findOrFail($id);
+        $admin = $request->user('admins');
+
+        $batch = Batch::where('id', $id)
+            ->whereHas('assessment', function ($q) use ($admin) {
+                $q->where('admin_id', $admin->id);
+            })
+            ->firstOrFail();
 
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'publish_date' => 'nullable|date',
             'start_time' => 'nullable|date_format:H:i:s',
             'end_time' => 'nullable|date_format:H:i:s',
-            'assessment_id' => 'nullable|exists:assessments,id',
             'capacity' => 'sometimes|required|integer|min:1',
         ]);
+
+        $start = $validated['start_time'] ?? $batch->start_time;
+        $end = $validated['end_time'] ?? $batch->end_time;
+        $date = $validated['publish_date'] ?? $batch->publish_date;
+
+        $conflict = Batch::where('assessment_id', $batch->assessment_id)
+            ->whereDate('publish_date', $date)
+            ->where('id', '!=', $batch->id)
+            ->where(function ($q) use ($start, $end) {
+                $q->where('start_time', '<', $end)
+                    ->where('end_time', '>', $start);
+            })
+            ->exists();
+
+        if ($conflict) {
+            return response()->json(['message' => 'Batch time conflict'], 422);
+        }
+
+        $assessment = Assessment::find($batch->assessment_id);
+
+        if ($assessment && !$assessment->is_batch_wise) {
+
+            $defaultName = 'individual_batch_' . $assessment->id;
+            $newName = $validated['name'] ?? $batch->name;
+
+            if ($newName === $defaultName) {
+
+                $existingDefault = Batch::where('assessment_id', $assessment->id)
+                    ->where('name', $defaultName)
+                    ->where('id', '!=', $batch->id)
+                    ->exists();
+
+                if ($existingDefault) {
+                    return response()->json([
+                        'message' => 'Default batch already exists for this assessment'
+                    ], 422);
+                }
+            }
+        }
 
         $batch->update($validated);
 
         return response()->json($batch);
     }
 
-    // Delete batch
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
-        Batch::findOrFail($id)->delete();
+        $admin = $request->user('admins');
+
+        $batch = Batch::where('id', $id)
+            ->whereHas('assessment', function ($q) use ($admin) {
+                $q->where('admin_id', $admin->id);
+            })
+            ->firstOrFail();
+
+        $batch->delete();
 
         return response()->json(['message' => 'Batch deleted']);
     }
 
+    function getUsersByBatchId($id)
+    {
+        return User::whereIn(
+            'id',
+            AssessmentAssignment::where('batch_id', $id)
+                ->pluck('user_id')
+        )->get();
+    }
+
     public function addUsers(Request $request, $id)
     {
-        $batch = Batch::findOrFail($id);
+        $admin = $request->user('admins');
+
+        $batch = Batch::where('id', $id)
+            ->whereHas('assessment', function ($q) use ($admin) {
+                $q->where('admin_id', $admin->id);
+            })
+            ->firstOrFail();
 
         $validated = $request->validate([
             'user_ids' => 'required|array',
             'user_ids.*' => 'exists:users,id',
         ]);
 
-        $existing = $batch->user_ids ?? [];
+        // ✅ correct capacity check (no duplicates)
+        $currentUsers = AssessmentAssignment::where('batch_id', $batch->id)
+            ->pluck('user_id')
+            ->toArray();
 
-        $merged = array_unique(array_merge($existing, $validated['user_ids']));
+        $newUsers = array_diff($validated['user_ids'], $currentUsers);
 
-        // optional capacity check
-        if ($batch->capacity && count($merged) > $batch->capacity) {
+        if ($batch->capacity && (count($currentUsers) + count($newUsers)) > $batch->capacity) {
             return response()->json(['message' => 'Capacity exceeded'], 422);
         }
 
-        $batch->update([
-            'user_ids' => $merged
+        $assignmentController = app(AssessmentAssignmentController::class);
+
+        $request->merge([
+            'assessment_id' => $batch->assessment_id,
+            'user_ids' => $validated['user_ids'],
+            'batch_id' => $batch->id,
         ]);
 
-        $newUsers = array_values(array_diff($validated['user_ids'], $existing));
-
-        $assignmentResponse = null;
-
-        if (!empty($newUsers) && $batch->assessment_id) {
-            $assignmentController = app(AssessmentAssignmentController::class);
-
-            $request->merge([
-                'assessment_id' => $batch->assessment_id,
-                'user_ids' => $newUsers,
-                'batch_id' => $batch->id,
-            ]);
-
-            $assignmentResponse = $assignmentController->store($request);
-        }
-
-        return response()->json([
-            'batch' => $batch,
-            'assignment' => $assignmentResponse?->getData(true)
-        ]);
+        return $assignmentController->store($request);
     }
 
     public function removeUsers(Request $request, $id)
     {
-        $batch = Batch::findOrFail($id);
+        $admin = $request->user('admins');
+
+        $batch = Batch::where('id', $id)
+            ->whereHas('assessment', function ($q) use ($admin) {
+                $q->where('admin_id', $admin->id);
+            })
+            ->firstOrFail();
 
         $validated = $request->validate([
             'user_ids' => 'required|array',
             'user_ids.*' => 'exists:users,id',
         ]);
 
-        $existing = $batch->user_ids ?? [];
+        $assignmentController = app(AssessmentAssignmentController::class);
 
-        $updated = array_values(array_diff($existing, $validated['user_ids']));
-
-        $batch->update([
-            'user_ids' => $updated
+        $request->merge([
+            'assessment_id' => $batch->assessment_id,
+            'user_ids' => $validated['user_ids'],
         ]);
 
-        if ($batch->assessment_id) {
-            $assignmentController = app(AssessmentAssignmentController::class);
-
-            $request->merge([
-                'assessment_id' => $batch->assessment_id,
-                'user_ids' => $validated['user_ids'],
-            ]);
-
-            $assignmentController->destroy($request);
-        }
-
-        return response()->json($batch);
+        return $assignmentController->destroy($request);
     }
 }

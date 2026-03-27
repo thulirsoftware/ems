@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AssessmentAssignment;
 use App\Models\Assessment;
+use App\Models\Batch;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 
@@ -28,25 +29,48 @@ class AssessmentAssignmentController extends Controller
             ], 404);
         }
 
-        $assignedUserIds = AssessmentAssignment::where('assessment_id', $validated['assessment_id'])
+        $batchId = $request->query('batch_id');
+
+        if ($assessment->is_batch_wise && empty($batchId)) {
+            return response()->json([
+                'message' => 'batch_id is required for batch-wise assessments'
+            ], 422);
+        }
+
+        // resolve batch
+        if ($assessment->is_batch_wise) {
+            $batch = Batch::where('id', $batchId)
+                ->where('assessment_id', $assessment->id)
+                ->first();
+        } else {
+            $batch = Batch::where('assessment_id', $assessment->id)
+                ->where('name', 'individual_batch_' . $assessment->id)
+                ->first();
+        }
+
+        if (!$batch) {
+            return response()->json([
+                'message' => 'Invalid batch_id for this assessment'
+            ], 422);
+        }
+
+        $assignedUserIds = AssessmentAssignment::where('assessment_id', $assessment->id)
             ->pluck('user_id')
             ->toArray();
 
         $users = \App\Models\User::select('id', 'name')
             ->get()
-            ->map(function ($user) use ($assignedUserIds, $assessment) {
+            ->map(function ($user) use ($assignedUserIds, $assessment, $batch) {
 
                 $conflict = \DB::table('assessment_assignments as aa')
                     ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
+                    ->join('batches as b', 'b.id', '=', 'aa.batch_id') // ✅ FIXED
                     ->where('aa.user_id', $user->id)
                     ->where('a.id', '!=', $assessment->id)
-                    ->whereNotNull('a.publish_date')
-                    ->whereDate('a.publish_date', $assessment->publish_date)
-                    ->whereNotNull('a.start_time')
-                    ->whereNotNull('a.end_time')
-                    ->where(function ($q) use ($assessment) {
-                        $q->where('a.start_time', '<', $assessment->end_time)
-                            ->where('a.end_time', '>', $assessment->start_time);
+                    ->whereDate('b.publish_date', $batch->publish_date)
+                    ->where(function ($q) use ($batch) {
+                        $q->where('b.start_time', '<', $batch->end_time)
+                            ->where('b.end_time', '>', $batch->start_time);
                     })
                     ->select('a.id', 'a.title')
                     ->first();
@@ -77,20 +101,27 @@ class AssessmentAssignmentController extends Controller
 
         $assessment = Assessment::where('id', $validated['assessment_id'])
             ->where('admin_id', $admin->id)
-            ->first();
+            ->firstOrFail();
 
-        if (!$assessment) {
-            return response()->json([
-                'message' => 'Assessment not found or you do not have access'
-            ], 404);
-        }
+        if ($assessment->is_batch_wise) {
+            if (empty($validated['batch_id'])) {
+                return response()->json(['message' => 'batch_id is required'], 422);
+            }
 
-        $batch = null;
-
-        if (!empty($validated['batch_id'])) {
-            $batch = \App\Models\Batch::where('id', $validated['batch_id'])
+            $batch = Batch::where('id', $validated['batch_id'])
                 ->where('assessment_id', $assessment->id)
                 ->first();
+
+        } else {
+            $batch = Batch::where('assessment_id', $assessment->id)
+                ->where('name', 'individual_batch_' . $assessment->id)
+                ->first();
+        }
+
+        if (!$batch) {
+            return response()->json([
+                'message' => 'Batch not found or invalid for this assessment'
+            ], 422);
         }
 
         $assignments = [];
@@ -98,47 +129,18 @@ class AssessmentAssignmentController extends Controller
 
         foreach ($validated['user_ids'] as $userId) {
 
-            // Check time conflict before assigning
-            if ($assessment->is_batch_wise) {
-
-                if ($batch->publish_date && $batch->start_time && $batch->end_time) {
-                    $conflict = \DB::table('assessment_assignments as aa')
-                        ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
-                        ->join('batches as b', 'b.assessment_id', '=', 'a.id')
-                        ->where('aa.user_id', $userId)
-                        ->where('a.id', '!=', $assessment->id)
-
-                        ->whereDate('b.publish_date', $batch->publish_date)
-
-                        ->where(function ($q) use ($batch) {
-                            $q->where('b.start_time', '<', $batch->end_time)
-                                ->where('b.end_time', '>', $batch->start_time);
-                        })
-
-                        ->select('a.id', 'a.title')
-                        ->first();
-                } else {
-                    $conflict = null;
-                }
-
-            } else {
-
-                // existing logic unchanged
-                $conflict = \DB::table('assessment_assignments as aa')
-                    ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
-                    ->where('aa.user_id', $userId)
-                    ->where('a.id', '!=', $assessment->id)
-                    ->whereNotNull('a.publish_date')
-                    ->whereDate('a.publish_date', $assessment->publish_date)
-                    ->whereNotNull('a.start_time')
-                    ->whereNotNull('a.end_time')
-                    ->where(function ($q) use ($assessment) {
-                        $q->where('a.start_time', '<', $assessment->end_time)
-                            ->where('a.end_time', '>', $assessment->start_time);
-                    })
-                    ->select('a.id', 'a.title')
-                    ->first();
-            }
+            $conflict = \DB::table('assessment_assignments as aa')
+                ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
+                ->join('batches as b', 'b.id', '=', 'aa.batch_id') // ✅ FIXED
+                ->where('aa.user_id', $userId)
+                ->where('a.id', '!=', $assessment->id)
+                ->whereDate('b.publish_date', $batch->publish_date)
+                ->where(function ($q) use ($batch) {
+                    $q->where('b.start_time', '<', $batch->end_time)
+                        ->where('b.end_time', '>', $batch->start_time);
+                })
+                ->select('a.id', 'a.title')
+                ->first();
 
             if ($conflict) {
                 $conflicts[] = [
@@ -149,10 +151,20 @@ class AssessmentAssignmentController extends Controller
                 continue;
             }
 
-            $assignment = AssessmentAssignment::firstOrCreate([
-                'assessment_id' => $assessment->id,
-                'user_id' => $userId,
-            ]);
+            $assignment = AssessmentAssignment::withTrashed()
+                ->where('assessment_id', $assessment->id)
+                ->where('user_id', $userId)
+                ->first();
+
+            if ($assignment) {
+                $assignment->restore();
+            } else {
+                $assignment = AssessmentAssignment::create([
+                    'assessment_id' => $assessment->id,
+                    'user_id' => $userId,
+                    'batch_id' => $batch->id
+                ]);
+            }
 
             NotificationService::notifyUser(
                 $userId,
@@ -169,7 +181,7 @@ class AssessmentAssignmentController extends Controller
         }
 
         return response()->json([
-            'message' => 'Assessment assignment completed',
+            'message' => 'Assignment completed',
             'assigned' => $assignments,
             'blocked_due_to_conflict' => $conflicts,
         ], 201);
@@ -187,15 +199,9 @@ class AssessmentAssignmentController extends Controller
 
         $assessment = Assessment::where('id', $validated['assessment_id'])
             ->where('admin_id', $admin->id)
-            ->first();
+            ->firstOrFail();
 
-        if (!$assessment) {
-            return response()->json([
-                'message' => 'Assessment not found or you do not have access'
-            ], 404);
-        }
-
-        $deleted = AssessmentAssignment::where('assessment_id', $validated['assessment_id'])
+        $deleted = AssessmentAssignment::where('assessment_id', $assessment->id)
             ->whereIn('user_id', $validated['user_ids'])
             ->delete();
 

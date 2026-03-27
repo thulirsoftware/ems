@@ -15,7 +15,8 @@ class AssessmentAttempt extends Model
         'started_at',
         'submitted_at',
         'score',
-        'question_order'
+        'question_order',
+        'batch_id'
     ];
 
     protected $hidden = [
@@ -28,16 +29,25 @@ class AssessmentAttempt extends Model
         'question_order' => 'array',
     ];
 
+    // Attempt → Assessment
     public function assessment()
     {
         return $this->belongsTo(Assessment::class);
     }
 
+    // Attempt → User
     public function user()
     {
         return $this->belongsTo(User::class);
     }
 
+    // Attempt → Batch
+    public function batch()
+    {
+        return $this->belongsTo(Batch::class);
+    }
+
+    // Attempt → Answers
     public function answers()
     {
         return $this->hasMany(AssessmentAnswer::class, 'attempt_id');

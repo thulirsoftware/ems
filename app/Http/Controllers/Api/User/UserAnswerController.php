@@ -35,8 +35,15 @@ class UserAnswerController extends Controller
 
         $validated = $request->validate($rules);
 
+        // 🔥 Get assignment (source of truth)
+        $assignment = \App\Models\AssessmentAssignment::where('assessment_id', $assessment_id)
+            ->where('user_id', $user->id)
+            ->firstOrFail();
+
+        // 🔥 Get correct attempt (batch-aware)
         $attempt = AssessmentAttempt::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)
+            ->where('batch_id', $assignment->batch_id)
             ->firstOrFail();
 
         if ($attempt->submitted_at) {
@@ -45,12 +52,12 @@ class UserAnswerController extends Controller
             ], 403);
         }
 
-        $assessment = Assessment::with('type')
-            ->where('id', $assessment_id)
+        // 🔥 Ensure question belongs to assessment
+        \App\Models\AssessmentQuestion::where('id', $validated['question_id'])
+            ->where('assessment_id', $assessment_id)
             ->firstOrFail();
 
-        $type = $assessment->type->slug;
-
+        // 🔥 Handle answer type
         switch ($type) {
             case 'mcq':
                 $answerData = $this->handleMcq($validated);
@@ -74,6 +81,7 @@ class UserAnswerController extends Controller
                 ], 422);
         }
 
+        // 🔥 Save answer
         $answer = AssessmentAnswer::updateOrCreate(
             [
                 'attempt_id' => $attempt->id,

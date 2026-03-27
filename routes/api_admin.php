@@ -35,6 +35,8 @@ Route::prefix('admin')->middleware('admin')->group(function () {
         Route::get('{id}', [AdminBatchController::class, 'show']);
         Route::put('{id}', [AdminBatchController::class, 'update']);
         Route::delete('{id}', [AdminBatchController::class, 'destroy']);
+        Route::get('assessment/{assessment_id}', [AdminBatchController::class, 'getBatchesByAssessment']);
+        Route::get('{id}/users', [AdminBatchController::class, 'getUsersByBatchId']);
         Route::post('{id}/users', [AdminBatchController::class, 'addUsers']);
         Route::delete('{id}/users', [AdminBatchController::class, 'removeUsers']);
     });

@@ -8,17 +8,17 @@ use App\Models\AssessmentAnswer;
 use App\Models\AssessmentAssignment;
 use App\Models\AssessmentAttempt;
 use App\Models\AssessmentChoice;
+use App\Models\Batch;
 use Illuminate\Http\Request;
 
 class AssessmentAttemptController extends Controller
 {
-    // Start assessment (create attempt)
+    // Start assessment
     public function start(Request $request, $assessment_id)
     {
         $user = $request->user('users');
 
-        // Ensure assessment is assigned to this user
-        AssessmentAssignment::where('assessment_id', $assessment_id)
+        $assignment = AssessmentAssignment::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)
             ->firstOrFail();
 
@@ -26,23 +26,37 @@ class AssessmentAttemptController extends Controller
             ->where('is_active', true)
             ->firstOrFail();
 
+        // 🔥 resolve batch
+        $batch = $assessment->is_batch_wise
+            ? Batch::find($assignment->batch_id)
+            : Batch::where('assessment_id', $assessment->id)
+                ->where('name', 'individual_batch_' . $assessment->id)
+                ->first();
+
+        if (!$batch) {
+            return response()->json([
+                'message' => 'Batch not found'
+            ], 422);
+        }
+
         $today = app_now()->toDateString();
         $nowTime = app_now()->toTimeString();
 
-        // Ensure assessment is running
+        // ✅ use batch timing
         if (
-            $assessment->publish_date !== $today ||
-            $nowTime < $assessment->start_time ||
-            $nowTime > $assessment->end_time
+            $batch->publish_date !== $today ||
+            $nowTime < $batch->start_time ||
+            $nowTime > $batch->end_time
         ) {
             return response()->json([
                 'message' => 'Assessment is not currently available'
             ], 403);
         }
 
-        // Prevent multiple attempts
+        // ✅ prevent multiple attempts per batch
         $existing = AssessmentAttempt::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)
+            ->where('batch_id', $assignment->batch_id)
             ->first();
 
         if ($existing) {
@@ -55,6 +69,7 @@ class AssessmentAttemptController extends Controller
         $attempt = AssessmentAttempt::create([
             'assessment_id' => $assessment_id,
             'user_id' => $user->id,
+            'batch_id' => $assignment->batch_id, // 🔥 IMPORTANT
             'started_at' => app_now()->toTimeString(),
         ]);
 
@@ -64,13 +79,18 @@ class AssessmentAttemptController extends Controller
         ], 201);
     }
 
-    // Submit assessment (finish attempt)
+    // Submit assessment
     public function submit(Request $request, $assessment_id)
     {
         $user = $request->user('users');
 
+        $assignment = AssessmentAssignment::where('assessment_id', $assessment_id)
+            ->where('user_id', $user->id)
+            ->firstOrFail();
+
         $attempt = AssessmentAttempt::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)
+            ->where('batch_id', $assignment->batch_id) // 🔥 FIX
             ->with(['answers', 'assessment.type'])
             ->firstOrFail();
 
@@ -116,7 +136,7 @@ class AssessmentAttemptController extends Controller
     {
         $assessment = $attempt->assessment;
 
-        $totalQuestions = $attempt->assessment->questions()->count();
+        $totalQuestions = $assessment->questions()->count();
         $correctCount = 0;
         $wrongCount = 0;
 
@@ -141,14 +161,12 @@ class AssessmentAttemptController extends Controller
             }
         }
 
-        // Apply negative marking
         if ($assessment->has_negative) {
             $finalScoreValue = $correctCount - ($wrongCount * $assessment->negative_marks);
         } else {
             $finalScoreValue = $correctCount;
         }
 
-        // Never allow negative total score
         if ($finalScoreValue < 0) {
             $finalScoreValue = 0;
         }
@@ -178,10 +196,14 @@ class AssessmentAttemptController extends Controller
     public function result(Request $request, $assessment_id)
     {
         $user = $request->user('users');
-        $pageSize = $request->get('page_size', 10);
+
+        $assignment = AssessmentAssignment::where('assessment_id', $assessment_id)
+            ->where('user_id', $user->id)
+            ->firstOrFail();
 
         $attempt = AssessmentAttempt::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)
+            ->where('batch_id', $assignment->batch_id) // 🔥 FIX
             ->with('answers')
             ->firstOrFail();
 
@@ -197,14 +219,12 @@ class AssessmentAttemptController extends Controller
             ], 403);
         }
 
-        // Paginate questions instead of answers
+        // (rest unchanged)
         $ordered = $attempt->question_order ?? [];
-
         $totalQuestions = count($ordered);
 
         $page = $request->get('page', 1);
         $pageSize = $request->get('page_size', 10);
-
         $offset = ($page - 1) * $pageSize;
 
         $paginatedIds = array_slice($ordered, $offset, $pageSize);
@@ -258,9 +278,6 @@ class AssessmentAttemptController extends Controller
             ? round(($scoreValue / $totalQuestions) * 100)
             : 0;
 
-        $currentPage = $page;
-        $totalPages = (int) ceil($totalQuestions / $pageSize);
-
         return response()->json([
             'score' => $scoreValue,
             'total_marks' => $totalQuestions,
@@ -269,8 +286,8 @@ class AssessmentAttemptController extends Controller
             'wrong' => $wrong,
             'unanswered' => $unanswered,
             'questions' => $questionData,
-            'current_page' => $currentPage,
-            'total_pages' => $totalPages,
+            'current_page' => $page,
+            'total_pages' => (int) ceil($totalQuestions / $pageSize),
         ]);
     }
 }

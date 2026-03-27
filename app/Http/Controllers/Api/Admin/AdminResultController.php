@@ -19,7 +19,7 @@ class AdminResultController extends Controller
             ->firstOrFail();
     }
 
-    // 1. Get finished assessments
+    // 1. Get finished assessments (batch-based)
     public function finishedAssessments(Request $request)
     {
         $admin = $request->user('admins');
@@ -29,31 +29,59 @@ class AdminResultController extends Controller
 
         $assessments = Assessment::where('admin_id', $admin->id)
             ->where('is_active', true)
-            ->where(function ($q) use ($today, $nowTime) {
-                $q->whereDate('publish_date', '<', $today)
-                    ->orWhere(function ($q2) use ($today, $nowTime) {
-                        $q2->whereDate('publish_date', $today)
-                            ->whereTime('end_time', '<', $nowTime);
-                    });
-            })
-            ->latest()
             ->get();
 
-        return response()->json($assessments);
+        $result = [];
+
+        foreach ($assessments as $assessment) {
+
+            $batches = \App\Models\Batch::where('assessment_id', $assessment->id)->get();
+
+            foreach ($batches as $batch) {
+
+                if (
+                    $batch->publish_date < $today ||
+                    (
+                        $batch->publish_date == $today &&
+                        $batch->end_time < $nowTime
+                    )
+                ) {
+                    $result[] = [
+                        ...$assessment->toArray(),
+                        'batch_id' => $batch->id,
+                        'publish_date' => $batch->publish_date,
+                        'start_time' => $batch->start_time,
+                        'end_time' => $batch->end_time,
+                    ];
+                }
+            }
+        }
+
+        return response()->json($result);
     }
 
-    // 2. Assigned users with attempt flag
+    // 2. Assigned users with attempt flag (batch-aware)
     public function usersByAssessment(Request $request, $assessment_id)
     {
         $admin = $request->user('admins');
 
         $assessment = $this->getAdminAssessment($admin->id, $assessment_id);
 
+        $result = resolve_batch($assessment, $request->query('batch_id'));
+
+        if (isset($result['error'])) {
+            return $result['error'];
+        }
+
+        $batch = $result['batch'];
+        $batchId = $batch?->id;
+
         $assignments = AssessmentAssignment::where('assessment_id', $assessment_id)
             ->with('user:id,name')
             ->get();
 
         $attempts = AssessmentAttempt::where('assessment_id', $assessment_id)
+            ->where('batch_id', $batchId)
             ->get()
             ->keyBy('user_id');
 
@@ -72,14 +100,24 @@ class AdminResultController extends Controller
         return response()->json($users);
     }
 
-    // Get answers for admin grading
+    // 3. Get answers for admin grading (batch-aware)
     public function userAnswersForGrading(Request $request, $assessment_id, $user_id)
     {
         $admin = $request->user('admins');
 
         $assessment = $this->getAdminAssessment($admin->id, $assessment_id);
 
+        $result = resolve_batch($assessment, $request->query('batch_id'));
+
+        if (isset($result['error'])) {
+            return $result['error'];
+        }
+
+        $batch = $result['batch'];
+        $batchId = $batch?->id;
+
         $attempt = AssessmentAttempt::where('assessment_id', $assessment_id)
+            ->where('batch_id', $batchId)
             ->where('user_id', $user_id)
             ->with('answers')
             ->firstOrFail();
@@ -124,12 +162,13 @@ class AdminResultController extends Controller
 
         return response()->json([
             'assessment_id' => $assessment_id,
+            'batch_id' => $batchId,
             'user_id' => $user_id,
             'questions' => $data
         ]);
     }
 
-    // Admin grades a specific answer
+    // 4. Admin grades a specific answer (batch-aware)
     public function gradeAnswer(Request $request, $assessment_id, $user_id, $question_id)
     {
         $admin = $request->user('admins');
@@ -140,7 +179,17 @@ class AdminResultController extends Controller
 
         $assessment = $this->getAdminAssessment($admin->id, $assessment_id);
 
+        $result = resolve_batch($assessment, $request->query('batch_id'));
+
+        if (isset($result['error'])) {
+            return $result['error'];
+        }
+
+        $batch = $result['batch'];
+        $batchId = $batch?->id;
+
         $attempt = AssessmentAttempt::where('assessment_id', $assessment_id)
+            ->where('batch_id', $batchId)
             ->where('user_id', $user_id)
             ->with('answers')
             ->firstOrFail();
@@ -210,14 +259,24 @@ class AdminResultController extends Controller
         ]);
     }
 
-    // 3. Final evaluated result
+    // 5. Final evaluated result (batch-aware)
     public function userResult(Request $request, $assessment_id, $user_id)
     {
         $admin = $request->user('admins');
 
         $assessment = $this->getAdminAssessment($admin->id, $assessment_id);
 
+        $result = resolve_batch($assessment, $request->query('batch_id'));
+
+        if (isset($result['error'])) {
+            return $result['error'];
+        }
+
+        $batch = $result['batch'];
+        $batchId = $batch?->id;
+
         $attempt = AssessmentAttempt::where('assessment_id', $assessment_id)
+            ->where('batch_id', $batchId)
             ->where('user_id', $user_id)
             ->with('answers')
             ->first();
@@ -283,6 +342,7 @@ class AdminResultController extends Controller
 
         return response()->json([
             'assessment_id' => $assessment_id,
+            'batch_id' => $batchId,
             'user_id' => $user_id,
             'score' => $scoreValue,
             'total_marks' => $totalQuestions,
@@ -292,50 +352,5 @@ class AdminResultController extends Controller
             'unanswered' => $unanswered,
             'questions' => $questionData,
         ]);
-    }
-
-    public function rankList(Request $request, $assessment_id)
-    {
-        $admin = $request->user('admins');
-
-        $assessment = $this->getAdminAssessment($admin->id, $assessment_id);
-
-        // Check if any submitted attempt is still pending evaluation
-        $pendingExists = AssessmentAttempt::where('assessment_id', $assessment_id)
-            ->whereNotNull('submitted_at')
-            ->where('score', 'Pending Evaluation')
-            ->exists();
-
-        if ($pendingExists) {
-            return response()->json([
-                'message' => 'Rank list cannot be generated until all assessments are evaluated'
-            ], 400);
-        }
-
-        $attempts = AssessmentAttempt::with('user:id,name')
-            ->where('assessment_id', $assessment_id)
-            ->whereNotNull('submitted_at')
-            ->get()
-            ->map(function ($attempt) {
-
-                $scoreParts = explode('/', $attempt->score);
-                $scoreValue = (int) ($scoreParts[0] ?? 0);
-                $total = (int) ($scoreParts[1] ?? 0);
-
-                return [
-                    'user_id' => $attempt->user->id,
-                    'name' => $attempt->user->name,
-                    'score' => $scoreValue,
-                    'total_marks' => $total
-                ];
-            })
-            ->sortByDesc('score')
-            ->values()
-            ->map(function ($item, $index) {
-                $item['rank'] = $index + 1;
-                return $item;
-            });
-
-        return response()->json($attempts);
     }
 }

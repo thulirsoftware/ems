@@ -14,24 +14,38 @@ class UserQuestionController extends Controller
     {
         $user = $request->user('users');
 
-        $attempt = AssessmentAttempt::where('assessment_id', $assessment_id)
+        $assignment = \App\Models\AssessmentAssignment::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)
             ->firstOrFail();
 
+        $attempt = AssessmentAttempt::where('assessment_id', $assessment_id)
+            ->where('user_id', $user->id)
+            ->where('batch_id', $assignment->batch_id)
+            ->firstOrFail();
+
         $assessment = Assessment::findOrFail($assessment_id);
+
+        // 🔥 batch-based timing
+        $batch = \App\Models\Batch::find($assignment->batch_id);
+
+        if (!$batch) {
+            return response()->json([
+                'message' => 'Batch not found'
+            ], 422);
+        }
 
         $today = app_now()->toDateString();
         $nowTime = app_now()->toTimeString();
 
         if (
-            $assessment->publish_date !== $today ||
-            $nowTime < $assessment->start_time ||
-            $nowTime > $assessment->end_time
+            $batch->publish_date !== $today ||
+            $nowTime < $batch->start_time ||
+            $nowTime > $batch->end_time
         ) {
             return response()->json(['message' => 'Assessment not running'], 403);
         }
 
-        // If no order stored yet, generate and store
+        // generate order if not exists
         if (!$attempt->question_order) {
 
             $questions = AssessmentQuestion::where('assessment_id', $assessment_id)->get();
@@ -50,7 +64,7 @@ class UserQuestionController extends Controller
             $ordered = $attempt->question_order;
         }
 
-        // Fetch questions in stored order
+        // fetch in order
         $questions = AssessmentQuestion::whereIn('id', $ordered)
             ->with([
                 'choices' => function ($q) {
@@ -58,13 +72,9 @@ class UserQuestionController extends Controller
                 }
             ])
             ->get()
-            ->sortBy(function ($q) use ($ordered) {
-                return array_search($q->id, $ordered);
-            })
+            ->sortBy(fn($q) => array_search($q->id, $ordered))
             ->values();
 
         return response()->json($questions);
     }
-
-
 }
