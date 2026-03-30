@@ -188,6 +188,59 @@ paths:
         401:
           description: Unauthenticated
 
+  /admin/users/bulk-assign:
+    post:
+      tags: [Admin Users]
+      summary: Bulk upload users via CSV or Excel
+      description: Upload a CSV/XLSX file to create multiple users at once
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: CSV or Excel file containing user data
+
+      responses:
+        200:
+          description: Bulk upload completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Bulk upload completed
+
+                  inserted:
+                    type: integer
+                    example: 25
+
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        row:
+                          type: integer
+                          example: 2
+                        error:
+                          type: string
+                          example: Invalid email
+
+        400:
+          description: File is empty
+
+        422:
+          description: Validation error (invalid file type)
+
   /admin/batches:
     get:
       tags: [Admin Batches]
@@ -857,6 +910,42 @@ paths:
               schema:
                 type: object
 
+  /admin/questions/bulk-store/{assessment_id}:
+    post:
+      tags: [Admin Assessment Questions]
+      summary: Bulk upload questions via CSV or Excel
+      parameters:
+        - name: assessment_id
+          in: path
+          required: true
+          schema:
+            type: integer
+
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+
+      responses:
+        200:
+          description: Bulk questions upload completed
+        400:
+          description: File is empty
+        403:
+          description: Cannot modify questions after attempt
+        422:
+          description: Validation error
+        404:
+          description: Assessment not found
+
   /admin/questions/{question_id}/choices:
     get:
       tags: [Admin Assessment Choices]
@@ -1365,6 +1454,103 @@ paths:
 
         400:
           description: Invalid grading request
+
+  /admin/re-exam:
+    post:
+      tags: [Admin Re-Exam]
+      summary: Create a re-exam batch and assign users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - assessment_id
+                - use_previous_users
+                - publish_date
+                - start_time
+                - end_time
+              properties:
+                assessment_id:
+                  type: integer
+                use_previous_users:
+                  type: boolean
+                source_batch_id:
+                  type: integer
+                  nullable: true
+                user_ids:
+                  type: array
+                  nullable: true
+                  items:
+                    type: integer
+                publish_date:
+                  type: string
+                  format: date
+                start_time:
+                  type: string
+                end_time:
+                  type: string
+      responses:
+        201:
+          description: Re-exam created successfully
+        422:
+          description: Validation error
+        404:
+          description: Assessment not found
+
+
+  /admin/re-exam/filtered:
+    post:
+      tags: [Admin Re-Exam]
+      summary: Create a filtered re-exam (failed / absent / both)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - assessment_id
+                - filter
+                - publish_date
+                - start_time
+                - end_time
+              properties:
+                assessment_id:
+                  type: integer
+
+                filter:
+                  type: string
+                  enum: [failed, absent, both]
+
+                passing_percentage:
+                  type: number
+                  nullable: true
+                  description: Required when filter is failed or both
+
+                source_batch_id:
+                  type: integer
+                  nullable: true
+                  description: Required if assessment is batch-wise
+
+                publish_date:
+                  type: string
+                  format: date
+
+                start_time:
+                  type: string
+
+                end_time:
+                  type: string
+
+      responses:
+        201:
+          description: Filtered re-exam created successfully
+        422:
+          description: Validation error (missing passing_percentage, source_batch_id, or no users matched)
+        404:
+          description: Assessment not found
 
   # -------------------------------------------------------- User --------------------------------------------------------
   /user/register:

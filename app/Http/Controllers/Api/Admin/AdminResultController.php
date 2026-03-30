@@ -60,7 +60,7 @@ class AdminResultController extends Controller
         return response()->json($result);
     }
 
-    // 2. Assigned users with attempt flag (batch-aware)
+    // 2. Assigned users with attempt flag (latest per user)
     public function usersByAssessment(Request $request, $assessment_id)
     {
         $admin = $request->user('admins');
@@ -76,9 +76,13 @@ class AdminResultController extends Controller
         $batch = $result['batch'];
         $batchId = $batch?->id;
 
+        // 🔥 latest assignment per user
         $assignments = AssessmentAssignment::where('assessment_id', $assessment_id)
             ->with('user:id,name')
-            ->get();
+            ->orderByDesc('id')
+            ->get()
+            ->unique('user_id')
+            ->values();
 
         $attempts = AssessmentAttempt::where('assessment_id', $assessment_id)
             ->where('batch_id', $batchId)

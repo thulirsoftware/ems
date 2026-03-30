@@ -35,9 +35,10 @@ class UserAnswerController extends Controller
 
         $validated = $request->validate($rules);
 
-        // 🔥 Get assignment (source of truth)
+        // 🔥 Get latest assignment (re-exam safe)
         $assignment = \App\Models\AssessmentAssignment::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)
+            ->latest('id')
             ->firstOrFail();
 
         // 🔥 Get correct attempt (batch-aware)

@@ -9,6 +9,11 @@ use Illuminate\Http\Request;
 
 class AssessmentController extends Controller
 {
+    private function isAssessmentLocked($assessment_id)
+    {
+        return \App\Models\AssessmentAttempt::where('assessment_id', $assessment_id)->exists();
+    }
+
     public function index(Request $request)
     {
         $admin = $request->user('admins');
@@ -101,6 +106,12 @@ class AssessmentController extends Controller
             ->where('id', $id)
             ->firstOrFail();
 
+        if ($this->isAssessmentLocked($assessment->id)) {
+            return response()->json([
+                'message' => 'Cannot modify assessment after it has been attempted'
+            ], 403);
+        }
+
         $validated = $request->validate([
             'assessment_type_id' => 'sometimes|exists:assessment_types,id',
             'title' => 'sometimes|string|max:255',
@@ -117,9 +128,14 @@ class AssessmentController extends Controller
             'is_batch_wise' => 'boolean'
         ]);
 
+        if (isset($validated['is_batch_wise']) && $validated['is_batch_wise'] != $assessment->is_batch_wise) {
+            return response()->json([
+                'message' => 'Changing batch mode is not allowed'
+            ], 422);
+        }
+
         $assessment->update($validated);
 
-        // sync default batch for individual
         if (!$assessment->is_batch_wise) {
             $batch = Batch::where('assessment_id', $assessment->id)
                 ->where('name', 'individual_batch_' . $assessment->id)
@@ -144,6 +160,12 @@ class AssessmentController extends Controller
         $assessment = Assessment::where('admin_id', $admin->id)
             ->where('id', $id)
             ->firstOrFail();
+
+        if ($this->isAssessmentLocked($assessment->id)) {
+            return response()->json([
+                'message' => 'Cannot delete assessment after it has been attempted'
+            ], 403);
+        }
 
         $assessment->delete();
 

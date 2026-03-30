@@ -14,10 +14,13 @@ class UserQuestionController extends Controller
     {
         $user = $request->user('users');
 
+        // 🔥 Get latest assignment (re-exam safe)
         $assignment = \App\Models\AssessmentAssignment::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)
+            ->latest('id')
             ->firstOrFail();
 
+        // 🔥 Get correct attempt
         $attempt = AssessmentAttempt::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)
             ->where('batch_id', $assignment->batch_id)
@@ -45,7 +48,7 @@ class UserQuestionController extends Controller
             return response()->json(['message' => 'Assessment not running'], 403);
         }
 
-        // generate order if not exists
+        // 🔥 generate order if not exists
         if (!$attempt->question_order) {
 
             $questions = AssessmentQuestion::where('assessment_id', $assessment_id)->get();
@@ -64,7 +67,7 @@ class UserQuestionController extends Controller
             $ordered = $attempt->question_order;
         }
 
-        // fetch in order
+        // 🔥 fetch in order
         $questions = AssessmentQuestion::whereIn('id', $ordered)
             ->with([
                 'choices' => function ($q) {

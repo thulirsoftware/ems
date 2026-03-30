@@ -39,9 +39,8 @@ if (!function_exists('resolve_batch')) {
             return ['batch' => $batch];
         }
 
-        // individual → get default batch
         $batch = Batch::where('assessment_id', $assessment->id)
-            ->where('name', 'individual_batch_' . $assessment->id)
+            ->latest('id')
             ->first();
 
         return ['batch' => $batch];

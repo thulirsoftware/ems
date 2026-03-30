@@ -20,18 +20,14 @@ class AssessmentAttemptController extends Controller
 
         $assignment = AssessmentAssignment::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)
+            ->latest('id')
             ->firstOrFail();
 
         $assessment = Assessment::where('id', $assessment_id)
             ->where('is_active', true)
             ->firstOrFail();
 
-        // 🔥 resolve batch
-        $batch = $assessment->is_batch_wise
-            ? Batch::find($assignment->batch_id)
-            : Batch::where('assessment_id', $assessment->id)
-                ->where('name', 'individual_batch_' . $assessment->id)
-                ->first();
+        $batch = Batch::find($assignment->batch_id);
 
         if (!$batch) {
             return response()->json([
@@ -42,7 +38,7 @@ class AssessmentAttemptController extends Controller
         $today = app_now()->toDateString();
         $nowTime = app_now()->toTimeString();
 
-        // ✅ use batch timing
+        // Strict timing only for starting
         if (
             $batch->publish_date !== $today ||
             $nowTime < $batch->start_time ||
@@ -53,23 +49,29 @@ class AssessmentAttemptController extends Controller
             ], 403);
         }
 
-        // ✅ prevent multiple attempts per batch
         $existing = AssessmentAttempt::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)
             ->where('batch_id', $assignment->batch_id)
             ->first();
 
         if ($existing) {
+
+            if (!$existing->submitted_at) {
+                return response()->json([
+                    'message' => 'Resume your current attempt',
+                    'attempt' => $existing
+                ], 200);
+            }
+
             return response()->json([
-                'message' => 'Assessment already started',
-                'attempt' => $existing
-            ], 200);
+                'message' => 'You have already completed this exam'
+            ], 403);
         }
 
         $attempt = AssessmentAttempt::create([
             'assessment_id' => $assessment_id,
             'user_id' => $user->id,
-            'batch_id' => $assignment->batch_id, // 🔥 IMPORTANT
+            'batch_id' => $assignment->batch_id,
             'started_at' => app_now()->toTimeString(),
         ]);
 
@@ -86,11 +88,12 @@ class AssessmentAttemptController extends Controller
 
         $assignment = AssessmentAssignment::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)
+            ->latest('id')
             ->firstOrFail();
 
         $attempt = AssessmentAttempt::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)
-            ->where('batch_id', $assignment->batch_id) // 🔥 FIX
+            ->where('batch_id', $assignment->batch_id)
             ->with(['answers', 'assessment.type'])
             ->firstOrFail();
 
@@ -199,11 +202,12 @@ class AssessmentAttemptController extends Controller
 
         $assignment = AssessmentAssignment::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)
+            ->latest('id')
             ->firstOrFail();
 
         $attempt = AssessmentAttempt::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)
-            ->where('batch_id', $assignment->batch_id) // 🔥 FIX
+            ->where('batch_id', $assignment->batch_id)
             ->with('answers')
             ->firstOrFail();
 
@@ -219,7 +223,6 @@ class AssessmentAttemptController extends Controller
             ], 403);
         }
 
-        // (rest unchanged)
         $ordered = $attempt->question_order ?? [];
         $totalQuestions = count($ordered);
 
@@ -232,9 +235,7 @@ class AssessmentAttemptController extends Controller
         $questions = \App\Models\AssessmentQuestion::whereIn('id', $paginatedIds)
             ->with('choices')
             ->get()
-            ->sortBy(function ($q) use ($paginatedIds) {
-                return array_search($q->id, $paginatedIds);
-            })
+            ->sortBy(fn($q) => array_search($q->id, $paginatedIds))
             ->values();
 
         $answers = $attempt->answers->keyBy('question_id');
@@ -247,7 +248,7 @@ class AssessmentAttemptController extends Controller
 
             $answer = $answers->get($question->id);
             $userOptionId = $answer?->answer['choice_id'] ?? null;
-            
+
             $correctOption = $question->choices->firstWhere('is_correct', true);
             $correctOptionId = $correctOption?->id;
 
@@ -262,12 +263,10 @@ class AssessmentAttemptController extends Controller
             return [
                 'id' => $question->id,
                 'question_text' => $question->question_text,
-                'options' => $question->choices->map(function ($choice) {
-                    return [
-                        'id' => $choice->id,
-                        'option' => $choice->option,
-                    ];
-                })->values(),
+                'options' => $question->choices->map(fn($c) => [
+                    'id' => $c->id,
+                    'option' => $c->option,
+                ])->values(),
                 'correct_option_id' => $correctOptionId,
                 'user_option_id' => $userOptionId,
             ];

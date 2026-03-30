@@ -5,10 +5,17 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AssessmentChoice;
 use App\Models\AssessmentQuestion;
+use App\Models\AssessmentAttempt;
 use Illuminate\Http\Request;
 
 class AssessmentChoiceController extends Controller
 {
+    // 🔒 Lock after any attempt
+    private function isAssessmentLocked($assessment_id)
+    {
+        return AssessmentAttempt::where('assessment_id', $assessment_id)->exists();
+    }
+
     public function index(Request $request, $question_id)
     {
         $admin = $request->user('admins');
@@ -28,9 +35,16 @@ class AssessmentChoiceController extends Controller
     {
         $admin = $request->user('admins');
 
-        AssessmentQuestion::whereHas('assessment', function ($q) use ($admin) {
+        $question = AssessmentQuestion::whereHas('assessment', function ($q) use ($admin) {
             $q->where('admin_id', $admin->id);
         })->where('id', $question_id)->firstOrFail();
+
+        // 🔒 LOCK
+        if ($this->isAssessmentLocked($question->assessment_id)) {
+            return response()->json([
+                'message' => 'Cannot modify choices after assessment has been attempted'
+            ], 403);
+        }
 
         $validated = $request->validate([
             'option' => 'required|string',
@@ -54,6 +68,13 @@ class AssessmentChoiceController extends Controller
             $q->where('admin_id', $admin->id);
         })->where('id', $id)->firstOrFail();
 
+        // 🔒 LOCK
+        if ($this->isAssessmentLocked($choice->question->assessment_id)) {
+            return response()->json([
+                'message' => 'Cannot modify choices after assessment has been attempted'
+            ], 403);
+        }
+
         $validated = $request->validate([
             'option' => 'sometimes|string',
             'is_correct' => 'boolean',
@@ -72,6 +93,13 @@ class AssessmentChoiceController extends Controller
         $choice = AssessmentChoice::whereHas('question.assessment', function ($q) use ($admin) {
             $q->where('admin_id', $admin->id);
         })->where('id', $id)->firstOrFail();
+
+        // 🔒 LOCK
+        if ($this->isAssessmentLocked($choice->question->assessment_id)) {
+            return response()->json([
+                'message' => 'Cannot delete choices after assessment has been attempted'
+            ], 403);
+        }
 
         $choice->delete();
 

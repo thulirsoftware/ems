@@ -19,15 +19,7 @@ class UserAssessmentController extends Controller
 
     private function resolveBatch($assignment, $batches)
     {
-        $assessment = $assignment->assessment;
-
-        if ($assessment->is_batch_wise) {
-            return $batches[$assignment->batch_id] ?? null;
-        }
-
-        return Batch::where('assessment_id', $assessment->id)
-            ->where('name', 'individual_batch_' . $assessment->id)
-            ->first();
+        return $batches[$assignment->batch_id] ?? null;
     }
 
     private function mapWithBatch($assignments, $batches)
@@ -64,11 +56,13 @@ class UserAssessmentController extends Controller
 
             $assessment = $assignment->assessment;
 
-            if (!$assessment->is_active) return false;
+            if (!$assessment->is_active)
+                return false;
 
             $batch = $this->resolveBatch($assignment, $batches);
 
-            if (!$batch) return false;
+            if (!$batch)
+                return false;
 
             return (
                 $batch->publish_date > $today
@@ -98,11 +92,13 @@ class UserAssessmentController extends Controller
 
             $assessment = $assignment->assessment;
 
-            if (!$assessment->is_active) return false;
+            if (!$assessment->is_active)
+                return false;
 
             $batch = $this->resolveBatch($assignment, $batches);
 
-            if (!$batch) return false;
+            if (!$batch)
+                return false;
 
             return (
                 $batch->publish_date == $today &&
@@ -130,18 +126,21 @@ class UserAssessmentController extends Controller
 
             $assessment = $assignment->assessment;
 
-            if (!$assessment->is_active) return false;
+            if (!$assessment->is_active)
+                return false;
 
             $batch = $this->resolveBatch($assignment, $batches);
 
-            if (!$batch) return false;
+            if (!$batch)
+                return false;
 
             $isRunning =
                 $batch->publish_date == $today &&
                 $batch->start_time <= $nowTime &&
                 $batch->end_time >= $nowTime;
 
-            if (!$isRunning) return false;
+            if (!$isRunning)
+                return false;
 
             return !\DB::table('assessment_attempts')
                 ->where('assessment_id', $assessment->id)
@@ -201,13 +200,15 @@ class UserAssessmentController extends Controller
 
             $batch = $this->resolveBatch($assignment, $batches);
 
-            if (!$batch) return false;
+            if (!$batch)
+                return false;
 
             $isMissed =
                 ($batch->publish_date < $today) ||
                 ($batch->publish_date == $today && $batch->end_time < $nowTime);
 
-            if (!$isMissed) return false;
+            if (!$isMissed)
+                return false;
 
             return !$attempts->contains(function ($a) use ($assignment) {
                 return $a->assessment_id == $assignment->assessment_id
@@ -225,10 +226,13 @@ class UserAssessmentController extends Controller
         $assignment = AssessmentAssignment::where('user_id', $user->id)
             ->where('assessment_id', $id)
             ->with('assessment')
+            ->latest('id')
             ->firstOrFail();
 
         $batches = $this->getBatchesMap(collect([$assignment]));
 
-        return response()->json($this->mapWithBatch(collect([$assignment]), $batches)->first());
+        return response()->json(
+            $this->mapWithBatch(collect([$assignment]), $batches)->first()
+        );
     }
 }

@@ -11,6 +11,11 @@ use Illuminate\Http\Request;
 
 class AdminBatchController extends Controller
 {
+    private function isBatchLocked($batch_id)
+    {
+        return \App\Models\AssessmentAttempt::where('batch_id', $batch_id)->exists();
+    }
+
     public function index(Request $request)
     {
         $admin = $request->user('admins');
@@ -100,6 +105,12 @@ class AdminBatchController extends Controller
             })
             ->firstOrFail();
 
+        if ($this->isBatchLocked($batch->id)) {
+            return response()->json([
+                'message' => 'Cannot modify batch after it has been attempted'
+            ], 403);
+        }
+
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'publish_date' => 'nullable|date',
@@ -162,6 +173,12 @@ class AdminBatchController extends Controller
             })
             ->firstOrFail();
 
+        if ($this->isBatchLocked($batch->id)) {
+            return response()->json([
+                'message' => 'Cannot delete batch after it has been attempted'
+            ], 403);
+        }
+
         $batch->delete();
 
         return response()->json(['message' => 'Batch deleted']);
@@ -185,6 +202,12 @@ class AdminBatchController extends Controller
                 $q->where('admin_id', $admin->id);
             })
             ->firstOrFail();
+
+        if ($this->isBatchLocked($batch->id)) {
+            return response()->json([
+                'message' => 'Cannot add users after batch has started'
+            ], 403);
+        }
 
         $validated = $request->validate([
             'user_ids' => 'required|array',
@@ -223,6 +246,12 @@ class AdminBatchController extends Controller
             })
             ->firstOrFail();
 
+        if ($this->isBatchLocked($batch->id)) {
+            return response()->json([
+                'message' => 'Cannot remove users after batch has started'
+            ], 403);
+        }
+
         $validated = $request->validate([
             'user_ids' => 'required|array',
             'user_ids.*' => 'exists:users,id',
@@ -233,6 +262,7 @@ class AdminBatchController extends Controller
         $request->merge([
             'assessment_id' => $batch->assessment_id,
             'user_ids' => $validated['user_ids'],
+            'batch_id' => $batch->id, // 🔥 REQUIRED
         ]);
 
         return $assignmentController->destroy($request);

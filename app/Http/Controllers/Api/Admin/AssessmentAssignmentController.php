@@ -11,6 +11,30 @@ use Illuminate\Http\Request;
 
 class AssessmentAssignmentController extends Controller
 {
+    private function isBatchLocked($batch_id)
+    {
+        return \App\Models\AssessmentAttempt::where('batch_id', $batch_id)->exists();
+    }
+
+    private function resolveBatch($assessment, $batchId = null)
+    {
+        if ($assessment->is_batch_wise) {
+
+            if (!$batchId) {
+                abort(422, 'batch_id is required for batch-wise assessments');
+            }
+
+            return Batch::where('id', $batchId)
+                ->where('assessment_id', $assessment->id)
+                ->firstOrFail();
+        }
+
+        // 🔥 always latest batch for non-batch-wise (re-exam safe)
+        return Batch::where('assessment_id', $assessment->id)
+            ->latest('id')
+            ->firstOrFail();
+    }
+
     public function usersWithAssignmentStatus(Request $request)
     {
         $admin = $request->user('admins');
@@ -21,40 +45,12 @@ class AssessmentAssignmentController extends Controller
 
         $assessment = Assessment::where('id', $validated['assessment_id'])
             ->where('admin_id', $admin->id)
-            ->first();
+            ->firstOrFail();
 
-        if (!$assessment) {
-            return response()->json([
-                'message' => 'Assessment not found or you do not have access'
-            ], 404);
-        }
-
-        $batchId = $request->query('batch_id');
-
-        if ($assessment->is_batch_wise && empty($batchId)) {
-            return response()->json([
-                'message' => 'batch_id is required for batch-wise assessments'
-            ], 422);
-        }
-
-        // resolve batch
-        if ($assessment->is_batch_wise) {
-            $batch = Batch::where('id', $batchId)
-                ->where('assessment_id', $assessment->id)
-                ->first();
-        } else {
-            $batch = Batch::where('assessment_id', $assessment->id)
-                ->where('name', 'individual_batch_' . $assessment->id)
-                ->first();
-        }
-
-        if (!$batch) {
-            return response()->json([
-                'message' => 'Invalid batch_id for this assessment'
-            ], 422);
-        }
+        $batch = $this->resolveBatch($assessment, $request->query('batch_id'));
 
         $assignedUserIds = AssessmentAssignment::where('assessment_id', $assessment->id)
+            ->where('batch_id', $batch->id) // ✅ FIX
             ->pluck('user_id')
             ->toArray();
 
@@ -64,7 +60,7 @@ class AssessmentAssignmentController extends Controller
 
                 $conflict = \DB::table('assessment_assignments as aa')
                     ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
-                    ->join('batches as b', 'b.id', '=', 'aa.batch_id') // ✅ FIXED
+                    ->join('batches as b', 'b.id', '=', 'aa.batch_id')
                     ->where('aa.user_id', $user->id)
                     ->where('a.id', '!=', $assessment->id)
                     ->whereDate('b.publish_date', $batch->publish_date)
@@ -103,25 +99,13 @@ class AssessmentAssignmentController extends Controller
             ->where('admin_id', $admin->id)
             ->firstOrFail();
 
-        if ($assessment->is_batch_wise) {
-            if (empty($validated['batch_id'])) {
-                return response()->json(['message' => 'batch_id is required'], 422);
-            }
+        $batch = $this->resolveBatch($assessment, $validated['batch_id'] ?? null);
 
-            $batch = Batch::where('id', $validated['batch_id'])
-                ->where('assessment_id', $assessment->id)
-                ->first();
-
-        } else {
-            $batch = Batch::where('assessment_id', $assessment->id)
-                ->where('name', 'individual_batch_' . $assessment->id)
-                ->first();
-        }
-
-        if (!$batch) {
+        // 🔒 lock after attempt
+        if ($this->isBatchLocked($batch->id)) {
             return response()->json([
-                'message' => 'Batch not found or invalid for this assessment'
-            ], 422);
+                'message' => 'Cannot assign users after batch has been attempted'
+            ], 403);
         }
 
         $assignments = [];
@@ -131,7 +115,7 @@ class AssessmentAssignmentController extends Controller
 
             $conflict = \DB::table('assessment_assignments as aa')
                 ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
-                ->join('batches as b', 'b.id', '=', 'aa.batch_id') // ✅ FIXED
+                ->join('batches as b', 'b.id', '=', 'aa.batch_id')
                 ->where('aa.user_id', $userId)
                 ->where('a.id', '!=', $assessment->id)
                 ->whereDate('b.publish_date', $batch->publish_date)
@@ -151,9 +135,11 @@ class AssessmentAssignmentController extends Controller
                 continue;
             }
 
+            // 🔥 batch-aware assignment
             $assignment = AssessmentAssignment::withTrashed()
                 ->where('assessment_id', $assessment->id)
                 ->where('user_id', $userId)
+                ->where('batch_id', $batch->id)
                 ->first();
 
             if ($assignment) {
@@ -195,13 +181,25 @@ class AssessmentAssignmentController extends Controller
             'assessment_id' => 'required|exists:assessments,id',
             'user_ids' => 'required|array|min:1',
             'user_ids.*' => 'exists:users,id',
+            'batch_id' => 'nullable|exists:batches,id',
         ]);
 
         $assessment = Assessment::where('id', $validated['assessment_id'])
             ->where('admin_id', $admin->id)
             ->firstOrFail();
 
+        $batch = $this->resolveBatch($assessment, $validated['batch_id'] ?? null);
+
+        // 🔒 lock after attempt
+        if ($this->isBatchLocked($batch->id)) {
+            return response()->json([
+                'message' => 'Cannot unassign users after batch has been attempted'
+            ], 403);
+        }
+
+        // 🔥 batch-safe delete
         $deleted = AssessmentAssignment::where('assessment_id', $assessment->id)
+            ->where('batch_id', $batch->id)
             ->whereIn('user_id', $validated['user_ids'])
             ->delete();
 

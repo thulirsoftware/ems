@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\Admin\AssessmentAssignmentController;
 use App\Http\Controllers\Api\Admin\AssessmentQuestionController;
 use App\Http\Controllers\Api\Admin\AssessmentChoiceController;
 use App\Http\Controllers\Api\Admin\AssessmentTypeController;
+use App\Http\Controllers\Api\Admin\ReExamController;
 
 // Admin auth
 Route::prefix('admin')->group(function () {
@@ -26,6 +27,7 @@ Route::prefix('admin')->group(function () {
 Route::prefix('admin')->middleware('admin')->group(function () {
     Route::get('users', [AdminUserController::class, 'index']);
     Route::post('users', [AdminUserController::class, 'store']);
+    Route::post('users/bulk-assign', [AdminUserController::class, 'bulkStore']);
 });
 
 Route::prefix('admin')->middleware('admin')->group(function () {
@@ -40,6 +42,11 @@ Route::prefix('admin')->middleware('admin')->group(function () {
         Route::post('{id}/users', [AdminBatchController::class, 'addUsers']);
         Route::delete('{id}/users', [AdminBatchController::class, 'removeUsers']);
     });
+});
+
+Route::prefix('admin')->middleware('admin')->group(function () {
+    Route::post('re-exam', [ReExamController::class, 'createReExam']);
+    Route::post('re-exam/filtered', [ReExamController::class, 'createFilteredReExam']);
 });
 
 // Admin assessments
@@ -67,6 +74,7 @@ Route::prefix('admin')->middleware('admin')->group(function () {
     Route::post('assessments/{assessment_id}/questions/with-choices', [AssessmentQuestionController::class, 'storeWithChoices']);
     Route::get('questions/{id}/with-choices', [AssessmentQuestionController::class, 'showWithChoices']);
     Route::put('questions/{id}/with-choices', [AssessmentQuestionController::class, 'updateWithChoices']);
+    Route::post('questions/bulk-store/{assessment_id}', [AssessmentQuestionController::class, 'bulkStoreQuestions']);
 
     // Choices
     Route::get('questions/{question_id}/choices', [AssessmentChoiceController::class, 'index']);
