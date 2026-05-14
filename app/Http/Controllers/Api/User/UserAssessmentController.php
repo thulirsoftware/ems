@@ -31,10 +31,15 @@ class UserAssessmentController extends Controller
 
             return [
                 ...$assessment->toArray(),
+
                 'batch_id' => $batch?->id,
+
                 'publish_date' => $batch?->publish_date,
                 'start_time' => $batch?->start_time,
                 'end_time' => $batch?->end_time,
+
+                'expiry_date' => $batch?->expiry_date,
+                'duration_minutes' => $batch?->duration_minutes,
             ];
         })->values();
     }
@@ -55,6 +60,10 @@ class UserAssessmentController extends Controller
         $filtered = $assignments->filter(function ($assignment) use ($today, $nowTime, $batches) {
 
             $assessment = $assignment->assessment;
+
+            if ($assessment->is_flexible) {
+                return false;
+            }
 
             if (!$assessment->is_active)
                 return false;
@@ -91,6 +100,10 @@ class UserAssessmentController extends Controller
         $filtered = $assignments->filter(function ($assignment) use ($today, $nowTime, $batches) {
 
             $assessment = $assignment->assessment;
+
+            if ($assessment->is_flexible) {
+                return false;
+            }
 
             if (!$assessment->is_active)
                 return false;
@@ -134,10 +147,18 @@ class UserAssessmentController extends Controller
             if (!$batch)
                 return false;
 
-            $isRunning =
-                $batch->publish_date == $today &&
-                $batch->start_time <= $nowTime &&
-                $batch->end_time >= $nowTime;
+            if ($assessment->is_flexible) {
+                $isRunning =
+                    !$batch->expiry_date ||
+                    $batch->expiry_date >= $today;
+
+            } else {
+                $isRunning =
+                    $batch->publish_date == $today &&
+                    $batch->start_time <= $nowTime &&
+                    $batch->end_time >= $nowTime;
+
+            }
 
             if (!$isRunning)
                 return false;
@@ -199,6 +220,14 @@ class UserAssessmentController extends Controller
         $filtered = $assignments->filter(function ($assignment) use ($attempts, $today, $nowTime, $batches) {
 
             $batch = $this->resolveBatch($assignment, $batches);
+
+            if (!$assignment->assessment->is_active) {
+                return false;
+            }
+
+            if ($assignment->assessment->is_flexible) {
+                return false;
+            }
 
             if (!$batch)
                 return false;

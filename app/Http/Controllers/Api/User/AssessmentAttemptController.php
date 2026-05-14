@@ -39,11 +39,23 @@ class AssessmentAttemptController extends Controller
         $nowTime = app_now()->toTimeString();
 
         // Strict timing only for starting
-        if (
-            $batch->publish_date !== $today ||
-            $nowTime < $batch->start_time ||
-            $nowTime > $batch->end_time
-        ) {
+        $isAvailable = false;
+
+        if ($assessment->is_flexible) {
+
+            $isAvailable =
+                !$batch->expiry_date ||
+                $batch->expiry_date >= $today;
+
+        } else {
+
+            $isAvailable =
+                $batch->publish_date === $today &&
+                $nowTime >= $batch->start_time &&
+                $nowTime <= $batch->end_time;
+        }
+
+        if (!$isAvailable) {
             return response()->json([
                 'message' => 'Assessment is not currently available'
             ], 403);

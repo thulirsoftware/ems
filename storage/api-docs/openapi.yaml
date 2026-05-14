@@ -533,37 +533,88 @@ paths:
           application/json:
             schema:
               type: object
-              required: [assessment_type_id, title]
+              required:
+                - assessment_type_id
+                - title
+                - difficulty_level
+                - is_batch_wise
               properties:
                 assessment_type_id:
                   type: integer
+                  example: 1
+
                 title:
                   type: string
+                  example: Math Test
+
                 description:
                   type: string
-                publish_date:
-                  type: string
-                start_time:
-                  type: string
-                end_time:
-                  type: string
-                shuffle:
-                  type: boolean
-                is_library:
-                  type: boolean
-                is_active:
-                  type: boolean
-                has_negative:
-                  type: boolean
-                negative_marks:
-                  type: number
+                  nullable: true
+
                 difficulty_level:
                   type: string
+                  example: medium
+
+                shuffle:
+                  type: boolean
+                  example: true
+
+                is_library:
+                  type: boolean
+                  example: false
+
+                is_active:
+                  type: boolean
+                  example: true
+
+                has_negative:
+                  type: boolean
+                  example: false
+
+                negative_marks:
+                  type: number
+                  nullable: true
+                  example: 0.5
+
                 is_batch_wise:
                   type: boolean
+                  example: false
+
+                is_flexible:
+                  type: boolean
+                  example: false
+
+                publish_date:
+                  type: string
+                  format: date
+                  nullable: true
+                  example: "2026-01-30"
+
+                start_time:
+                  type: string
+                  example: "10:00:00"
+                  nullable: true
+
+                end_time:
+                  type: string
+                  example: "11:00:00"
+                  nullable: true
+
+                expiry_date:
+                  type: string
+                  format: date
+                  nullable: true
+                  example: "2026-02-05"
+
+                duration_minutes:
+                  type: integer
+                  nullable: true
+                  example: 60
+
       responses:
         201:
           description: Assessment created
+
 
   /admin/assessments/{id}:
     get:
@@ -588,6 +639,7 @@ paths:
           required: true
           schema:
             type: integer
+
       requestBody:
         required: true
         content:
@@ -598,40 +650,75 @@ paths:
                 assessment_type_id:
                   type: integer
                   example: 1
+
                 title:
                   type: string
                   example: Math Test
+
                 description:
                   type: string
-                  example: Final exam
-                publish_date:
+                  nullable: true
+
+                difficulty_level:
                   type: string
-                  example: "2026-01-30"
-                start_time:
-                  type: string
-                  example: "10:00:00"
-                end_time:
-                  type: string
-                  example: "11:00:00"
+                  example: medium
+
                 shuffle:
                   type: boolean
                   example: true
+
                 is_library:
                   type: boolean
                   example: false
+
                 is_active:
                   type: boolean
                   example: true
+
                 has_negative:
                   type: boolean
-                  example: true
+                  example: false
+
                 negative_marks:
                   type: number
+                  nullable: true
                   example: 0.5
-                difficulty_level:
-                  type: string
+
                 is_batch_wise:
                   type: boolean
+                  example: false
+
+                is_flexible:
+                  type: boolean
+                  example: false
+
+                publish_date:
+                  type: string
+                  format: date
+                  nullable: true
+                  example: "2026-01-30"
+
+                start_time:
+                  type: string
+                  nullable: true
+                  example: "10:00:00"
+
+                end_time:
+                  type: string
+                  nullable: true
+                  example: "11:00:00"
+
+                expiry_date:
+                  type: string
+                  format: date
+                  nullable: true
+                  example: "2026-02-05"
+
+                duration_minutes:
+                  type: integer
+                  nullable: true
+                  example: 60
+
       responses:
         200:
           description: Assessment updated
@@ -649,6 +736,7 @@ paths:
         200:
           description: Assessment deleted
 
+
   /admin/assessments/library:
     get:
       tags: [Admin Assessments]
@@ -656,14 +744,16 @@ paths:
       responses:
         200:
           description: List of library assessments
-  
+
+
   /admin/assessments/upcoming:
     get:
       tags: [Admin Assessments]
-      summary: Get upcoming assessments (today, not started yet)
+      summary: Get upcoming assessments
       responses:
         200:
           description: List of upcoming assessments
+
 
   /admin/assessments/running:
     get:

@@ -30,6 +30,12 @@ class ReExamController extends Controller
             ->where('admin_id', $admin->id)
             ->firstOrFail();
 
+        if ($assessment->is_flexible) {
+            return response()->json([
+                'message' => 'Flexible assessments do not support re-exams'
+            ], 422);
+        }
+
         $sourceBatch = null;
 
         // 🔥 Resolve users + source batch
@@ -175,6 +181,12 @@ class ReExamController extends Controller
         $assessment = Assessment::where('id', $validated['assessment_id'])
             ->where('admin_id', $admin->id)
             ->firstOrFail();
+
+        if ($assessment->is_flexible) {
+            return response()->json([
+                'message' => 'Flexible assessments do not support re-exams'
+            ], 422);
+        }
 
         // ✅ Resolve source batch
         if ($assessment->is_batch_wise) {

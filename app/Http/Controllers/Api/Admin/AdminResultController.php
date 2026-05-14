@@ -39,21 +39,38 @@ class AdminResultController extends Controller
 
             foreach ($batches as $batch) {
 
-                if (
-                    $batch->publish_date < $today ||
-                    (
-                        $batch->publish_date == $today &&
-                        $batch->end_time < $nowTime
-                    )
-                ) {
-                    $result[] = [
-                        ...$assessment->toArray(),
-                        'batch_id' => $batch->id,
-                        'publish_date' => $batch->publish_date,
-                        'start_time' => $batch->start_time,
-                        'end_time' => $batch->end_time,
-                    ];
+                $isFinished = false;
+
+                if ($assessment->is_flexible) {
+
+                    $isFinished = true;
+
+                } else {
+
+                    $isFinished =
+                        $batch->publish_date < $today ||
+                        (
+                            $batch->publish_date == $today &&
+                            $batch->end_time < $nowTime
+                        );
                 }
+
+                if (!$isFinished) {
+                    continue;
+                }
+
+                $result[] = [
+                    ...$assessment->toArray(),
+
+                    'batch_id' => $batch->id,
+
+                    'publish_date' => $batch->publish_date,
+                    'start_time' => $batch->start_time,
+                    'end_time' => $batch->end_time,
+
+                    'expiry_date' => $batch->expiry_date,
+                    'duration_minutes' => $batch->duration_minutes,
+                ];
             }
         }
 

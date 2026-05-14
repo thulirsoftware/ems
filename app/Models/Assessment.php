@@ -23,7 +23,8 @@ class Assessment extends Model
         'is_library',
         'has_negative',
         'negative_marks',
-        'is_batch_wise'
+        'is_batch_wise',
+        'is_flexible'
     ];
 
     protected $hidden = [

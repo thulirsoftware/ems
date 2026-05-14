@@ -53,6 +53,56 @@ class UserAnswerController extends Controller
             ], 403);
         }
 
+        $batch = \App\Models\Batch::findOrFail(
+            $assignment->batch_id
+        );
+
+        $today = app_now()->toDateString();
+        $nowTime = app_now()->toTimeString();
+
+        if ($assessment->is_flexible) {
+
+            if ($batch->duration_minutes) {
+
+                $startedAt = app_now()
+                    ->copy()
+                    ->setTimeFromTimeString(
+                        $attempt->started_at
+                    );
+
+                if ($startedAt->gt(app_now())) {
+                    $startedAt->subDay();
+                }
+                
+                $expiresAt = $startedAt
+                    ->copy()
+                    ->addMinutes(
+                        $batch->duration_minutes
+                    );
+
+                if (app_now()->gt($expiresAt)) {
+                    return response()->json([
+                        'message' => 'Assessment time expired'
+                    ], 403);
+                }
+            }
+
+        } else {
+
+            $isExpired =
+                $batch->publish_date < $today ||
+                (
+                    $batch->publish_date == $today &&
+                    $nowTime > $batch->end_time
+                );
+
+            if ($isExpired) {
+                return response()->json([
+                    'message' => 'Assessment time expired'
+                ], 403);
+            }
+        }
+
         // 🔥 Ensure question belongs to assessment
         \App\Models\AssessmentQuestion::where('id', $validated['question_id'])
             ->where('assessment_id', $assessment_id)

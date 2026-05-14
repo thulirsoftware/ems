@@ -14,7 +14,8 @@ class Batch extends Model
         'publish_date',
         'start_time',
         'end_time',
-        'is_batch_wise',
+        'expiry_date',
+        'duration_minutes',
         'assessment_id',
         'capacity',
     ];

@@ -40,12 +40,48 @@ class UserQuestionController extends Controller
         $today = app_now()->toDateString();
         $nowTime = app_now()->toTimeString();
 
-        if (
-            $batch->publish_date !== $today ||
-            $nowTime < $batch->start_time ||
-            $nowTime > $batch->end_time
-        ) {
-            return response()->json(['message' => 'Assessment not running'], 403);
+        $isRunning = false;
+
+        if ($assessment->is_flexible) {
+
+            if ($batch->duration_minutes) {
+
+                $startedAt = app_now()
+                    ->copy()
+                    ->setTimeFromTimeString(
+                        $attempt->started_at
+                    );
+
+                if ($startedAt->gt(app_now())) {
+                    $startedAt->subDay();
+                }
+
+                $expiresAt = $startedAt
+                    ->copy()
+                    ->addMinutes(
+                        $batch->duration_minutes
+                    );
+
+                $isRunning =
+                    app_now()->lte($expiresAt);
+
+            } else {
+
+                $isRunning = true;
+            }
+
+        } else {
+
+            $isRunning =
+                $batch->publish_date == $today &&
+                $nowTime >= $batch->start_time &&
+                $nowTime <= $batch->end_time;
+        }
+
+        if (!$isRunning) {
+            return response()->json([
+                'message' => 'Assessment not running'
+            ], 403);
         }
 
         // 🔥 generate order if not exists

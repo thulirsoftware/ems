@@ -58,18 +58,23 @@ class AssessmentAssignmentController extends Controller
             ->get()
             ->map(function ($user) use ($assignedUserIds, $assessment, $batch) {
 
-                $conflict = \DB::table('assessment_assignments as aa')
-                    ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
-                    ->join('batches as b', 'b.id', '=', 'aa.batch_id')
-                    ->where('aa.user_id', $user->id)
-                    ->where('a.id', '!=', $assessment->id)
-                    ->whereDate('b.publish_date', $batch->publish_date)
-                    ->where(function ($q) use ($batch) {
-                        $q->where('b.start_time', '<', $batch->end_time)
-                            ->where('b.end_time', '>', $batch->start_time);
-                    })
-                    ->select('a.id', 'a.title')
-                    ->first();
+                $conflict = null;
+
+                if (!$assessment->is_flexible) {
+
+                    $conflict = \DB::table('assessment_assignments as aa')
+                        ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
+                        ->join('batches as b', 'b.id', '=', 'aa.batch_id')
+                        ->where('aa.user_id', $user->id)
+                        ->where('a.id', '!=', $assessment->id)
+                        ->whereDate('b.publish_date', $batch->publish_date)
+                        ->where(function ($q) use ($batch) {
+                            $q->where('b.start_time', '<', $batch->end_time)
+                                ->where('b.end_time', '>', $batch->start_time);
+                        })
+                        ->select('a.id', 'a.title')
+                        ->first();
+                }
 
                 return [
                     'user_id' => $user->id,
@@ -113,18 +118,23 @@ class AssessmentAssignmentController extends Controller
 
         foreach ($validated['user_ids'] as $userId) {
 
-            $conflict = \DB::table('assessment_assignments as aa')
-                ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
-                ->join('batches as b', 'b.id', '=', 'aa.batch_id')
-                ->where('aa.user_id', $userId)
-                ->where('a.id', '!=', $assessment->id)
-                ->whereDate('b.publish_date', $batch->publish_date)
-                ->where(function ($q) use ($batch) {
-                    $q->where('b.start_time', '<', $batch->end_time)
-                        ->where('b.end_time', '>', $batch->start_time);
-                })
-                ->select('a.id', 'a.title')
-                ->first();
+            $conflict = null;
+
+            if (!$assessment->is_flexible) {
+
+                $conflict = \DB::table('assessment_assignments as aa')
+                    ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
+                    ->join('batches as b', 'b.id', '=', 'aa.batch_id')
+                    ->where('aa.user_id', $userId)
+                    ->where('a.id', '!=', $assessment->id)
+                    ->whereDate('b.publish_date', $batch->publish_date)
+                    ->where(function ($q) use ($batch) {
+                        $q->where('b.start_time', '<', $batch->end_time)
+                            ->where('b.end_time', '>', $batch->start_time);
+                    })
+                    ->select('a.id', 'a.title')
+                    ->first();
+            }
 
             if ($conflict) {
                 $conflicts[] = [
