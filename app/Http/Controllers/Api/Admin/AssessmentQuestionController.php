@@ -7,12 +7,13 @@ use App\Models\AssessmentChoice;
 use App\Models\AssessmentQuestion;
 use App\Models\Assessment;
 use App\Models\AssessmentAttempt;
-use DB;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Maatwebsite\Excel\Facades\Excel;
 
 class AssessmentQuestionController extends Controller
 {
-    // 🔒 Prevent modifications after attempts exist
+    // Prevent modifications after attempts exist
     private function isAssessmentLocked($assessment_id)
     {
         return AssessmentAttempt::where('assessment_id', $assessment_id)->exists();
@@ -249,7 +250,7 @@ class AssessmentQuestionController extends Controller
             ], 403);
         }
 
-        $rows = \Maatwebsite\Excel\Facades\Excel::toArray([], $request->file('file'))[0];
+        $rows = Excel::toArray([], $request->file('file'))[0];
 
         if (count($rows) < 2) {
             return response()->json(['message' => 'File is empty'], 400);
@@ -264,7 +265,7 @@ class AssessmentQuestionController extends Controller
 
         try {
 
-            // 🔥 Start order from last + 1
+            // Start order from last + 1
             $currentOrder = AssessmentQuestion::where('assessment_id', $assessment_id)
                 ->max('order') ?? 0;
 
@@ -304,7 +305,7 @@ class AssessmentQuestionController extends Controller
                         }
                     }
 
-                    // 🔥 Increment order
+                    // Increment order
                     $currentOrder++;
 
                     $question = AssessmentQuestion::create([
@@ -331,10 +332,10 @@ class AssessmentQuestionController extends Controller
                 }
             }
 
-            \DB::commit();
+            DB::commit();
 
         } catch (\Exception $e) {
-            \DB::rollBack();
+            DB::rollBack();
             return response()->json(['message' => 'Bulk insert failed'], 500);
         }
 

@@ -51,6 +51,6 @@ class Assessment extends Model
 
     public function batches()
     {
-        return $this->hasMany(\App\Models\Batch::class);
+        return $this->hasMany(Batch::class);
     }
 }

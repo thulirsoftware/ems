@@ -9,6 +9,7 @@ use App\Models\AssessmentAssignment;
 use App\Models\AssessmentAttempt;
 use App\Models\AssessmentChoice;
 use App\Models\Batch;
+use App\Models\AssessmentQuestion;
 use Illuminate\Http\Request;
 
 class AssessmentAttemptController extends Controller
@@ -244,7 +245,7 @@ class AssessmentAttemptController extends Controller
 
         $paginatedIds = array_slice($ordered, $offset, $pageSize);
 
-        $questions = \App\Models\AssessmentQuestion::whereIn('id', $paginatedIds)
+        $questions = AssessmentQuestion::whereIn('id', $paginatedIds)
             ->with('choices')
             ->get()
             ->sortBy(fn($q) => array_search($q->id, $paginatedIds))

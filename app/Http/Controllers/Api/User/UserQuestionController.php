@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Assessment;
 use App\Models\AssessmentAttempt;
 use App\Models\AssessmentQuestion;
+use App\Models\AssessmentAssignment;
+use App\Models\Batch;
 use Illuminate\Http\Request;
 
 class UserQuestionController extends Controller
@@ -14,13 +16,13 @@ class UserQuestionController extends Controller
     {
         $user = $request->user('users');
 
-        // 🔥 Get latest assignment (re-exam safe)
-        $assignment = \App\Models\AssessmentAssignment::where('assessment_id', $assessment_id)
+        // Get latest assignment (re-exam safe)
+        $assignment = AssessmentAssignment::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)
             ->latest('id')
             ->firstOrFail();
 
-        // 🔥 Get correct attempt
+        // Get correct attempt
         $attempt = AssessmentAttempt::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)
             ->where('batch_id', $assignment->batch_id)
@@ -28,8 +30,8 @@ class UserQuestionController extends Controller
 
         $assessment = Assessment::findOrFail($assessment_id);
 
-        // 🔥 batch-based timing
-        $batch = \App\Models\Batch::find($assignment->batch_id);
+        // batch-based timing
+        $batch = Batch::find($assignment->batch_id);
 
         if (!$batch) {
             return response()->json([
@@ -84,7 +86,7 @@ class UserQuestionController extends Controller
             ], 403);
         }
 
-        // 🔥 generate order if not exists
+        // generate order if not exists
         if (!$attempt->question_order) {
 
             $questions = AssessmentQuestion::where('assessment_id', $assessment_id)->get();
@@ -103,7 +105,7 @@ class UserQuestionController extends Controller
             $ordered = $attempt->question_order;
         }
 
-        // 🔥 fetch in order
+        // fetch in order
         $questions = AssessmentQuestion::whereIn('id', $ordered)
             ->with([
                 'choices' => function ($q) {

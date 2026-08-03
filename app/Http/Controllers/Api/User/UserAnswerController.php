@@ -7,10 +7,52 @@ use App\Models\Assessment;
 use App\Models\AssessmentAnswer;
 use App\Models\AssessmentAttempt;
 use App\Models\AssessmentChoice;
+use App\Models\AssessmentAssignment;
+use App\Models\AssessmentQuestion;
+use App\Models\Batch;
 use Illuminate\Http\Request;
 
 class UserAnswerController extends Controller
 {
+    private function handleMcq(array $data)
+    {
+        AssessmentChoice::where('id', $data['choice_id'])
+            ->where('question_id', $data['question_id'])
+            ->firstOrFail();
+
+        return [
+            'choice_id' => $data['choice_id']
+        ];
+    }
+
+    private function handleDescriptive(array $data)
+    {
+        if (empty($data['answer'])) {
+            abort(422, 'Answer is required');
+        }
+
+        return [
+            'text' => $data['answer']
+        ];
+    }
+
+    private function handleCoding(array $data)
+    {
+        if (empty($data['answer'])) {
+            abort(422, 'Code answer is required');
+        }
+
+        return [
+            'code' => $data['answer']
+        ];
+    }
+
+    // case_based answers are stored exactly like descriptive ones
+    private function handleCaseBased(array $data)
+    {
+        return $this->handleDescriptive($data);
+    }
+
     public function store(Request $request, $assessment_id)
     {
         $user = $request->user('users');
@@ -35,13 +77,13 @@ class UserAnswerController extends Controller
 
         $validated = $request->validate($rules);
 
-        // 🔥 Get latest assignment (re-exam safe)
-        $assignment = \App\Models\AssessmentAssignment::where('assessment_id', $assessment_id)
+        // Get latest assignment (re-exam safe)
+        $assignment = AssessmentAssignment::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)
             ->latest('id')
             ->firstOrFail();
 
-        // 🔥 Get correct attempt (batch-aware)
+        // Get correct attempt (batch-aware)
         $attempt = AssessmentAttempt::where('assessment_id', $assessment_id)
             ->where('user_id', $user->id)
             ->where('batch_id', $assignment->batch_id)
@@ -53,7 +95,7 @@ class UserAnswerController extends Controller
             ], 403);
         }
 
-        $batch = \App\Models\Batch::findOrFail(
+        $batch = Batch::findOrFail(
             $assignment->batch_id
         );
 
@@ -103,12 +145,12 @@ class UserAnswerController extends Controller
             }
         }
 
-        // 🔥 Ensure question belongs to assessment
-        \App\Models\AssessmentQuestion::where('id', $validated['question_id'])
+        // Ensure question belongs to assessment
+        AssessmentQuestion::where('id', $validated['question_id'])
             ->where('assessment_id', $assessment_id)
             ->firstOrFail();
 
-        // 🔥 Handle answer type
+        // Handle answer type
         switch ($type) {
             case 'mcq':
                 $answerData = $this->handleMcq($validated);
@@ -132,7 +174,7 @@ class UserAnswerController extends Controller
                 ], 422);
         }
 
-        // 🔥 Save answer
+        // Save answer
         $answer = AssessmentAnswer::updateOrCreate(
             [
                 'attempt_id' => $attempt->id,
@@ -149,47 +191,4 @@ class UserAnswerController extends Controller
         ]);
     }
 
-    private function handleMcq(array $data)
-    {
-        AssessmentChoice::where('id', $data['choice_id'])
-            ->where('question_id', $data['question_id'])
-            ->firstOrFail();
-
-        return [
-            'choice_id' => $data['choice_id']
-        ];
-    }
-
-    private function handleDescriptive(array $data)
-    {
-        if (empty($data['answer'])) {
-            abort(422, 'Answer is required');
-        }
-
-        return [
-            'text' => $data['answer']
-        ];
-    }
-
-    private function handleCoding(array $data)
-    {
-        if (empty($data['answer'])) {
-            abort(422, 'Code answer is required');
-        }
-
-        return [
-            'code' => $data['answer']
-        ];
-    }
-
-    private function handleCaseBased(array $data)
-    {
-        if (empty($data['answer'])) {
-            abort(422, 'Answer is required');
-        }
-
-        return [
-            'text' => $data['answer']
-        ];
-    }
 }

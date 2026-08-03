@@ -7,13 +7,14 @@ use App\Models\Batch;
 use App\Models\Assessment;
 use App\Models\AssessmentAssignment;
 use App\Models\User;
+use App\Models\AssessmentAttempt;
 use Illuminate\Http\Request;
 
 class AdminBatchController extends Controller
 {
     private function isBatchLocked($batch_id)
     {
-        return \App\Models\AssessmentAttempt::where('batch_id', $batch_id)->exists();
+        return AssessmentAttempt::where('batch_id', $batch_id)->exists();
     }
 
     public function index(Request $request)
@@ -184,13 +185,15 @@ class AdminBatchController extends Controller
         return response()->json(['message' => 'Batch deleted']);
     }
 
-    function getUsersByBatchId($id)
+    public function getUsersByBatchId(Request $request, $id)
     {
-        return User::whereIn(
+        $users = User::whereIn(
             'id',
             AssessmentAssignment::where('batch_id', $id)
                 ->pluck('user_id')
         )->get();
+
+        return response()->json($users);
     }
 
     public function addUsers(Request $request, $id)
@@ -214,7 +217,7 @@ class AdminBatchController extends Controller
             'user_ids.*' => 'exists:users,id',
         ]);
 
-        // ✅ correct capacity check (no duplicates)
+        // correct capacity check (no duplicates)
         $currentUsers = AssessmentAssignment::where('batch_id', $batch->id)
             ->pluck('user_id')
             ->toArray();
@@ -262,7 +265,7 @@ class AdminBatchController extends Controller
         $request->merge([
             'assessment_id' => $batch->assessment_id,
             'user_ids' => $validated['user_ids'],
-            'batch_id' => $batch->id, // 🔥 REQUIRED
+            'batch_id' => $batch->id,
         ]);
 
         return $assignmentController->destroy($request);

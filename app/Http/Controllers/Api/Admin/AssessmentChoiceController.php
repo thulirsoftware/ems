@@ -10,7 +10,7 @@ use Illuminate\Http\Request;
 
 class AssessmentChoiceController extends Controller
 {
-    // 🔒 Lock after any attempt
+    // Lock after any attempt
     private function isAssessmentLocked($assessment_id)
     {
         return AssessmentAttempt::where('assessment_id', $assessment_id)->exists();
@@ -39,7 +39,6 @@ class AssessmentChoiceController extends Controller
             $q->where('admin_id', $admin->id);
         })->where('id', $question_id)->firstOrFail();
 
-        // 🔒 LOCK
         if ($this->isAssessmentLocked($question->assessment_id)) {
             return response()->json([
                 'message' => 'Cannot modify choices after assessment has been attempted'
@@ -68,7 +67,6 @@ class AssessmentChoiceController extends Controller
             $q->where('admin_id', $admin->id);
         })->where('id', $id)->firstOrFail();
 
-        // 🔒 LOCK
         if ($this->isAssessmentLocked($choice->question->assessment_id)) {
             return response()->json([
                 'message' => 'Cannot modify choices after assessment has been attempted'
@@ -94,7 +92,6 @@ class AssessmentChoiceController extends Controller
             $q->where('admin_id', $admin->id);
         })->where('id', $id)->firstOrFail();
 
-        // 🔒 LOCK
         if ($this->isAssessmentLocked($choice->question->assessment_id)) {
             return response()->json([
                 'message' => 'Cannot delete choices after assessment has been attempted'

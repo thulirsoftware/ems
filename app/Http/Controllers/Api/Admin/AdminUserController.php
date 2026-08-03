@@ -10,9 +10,9 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class AdminUserController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return User::all();
+        return response()->json(User::all());
     }
 
     public function store(Request $request)
@@ -27,7 +27,7 @@ class AdminUserController extends Controller
         $user->name = $validated['name'];
         $user->email = $validated['email'];
         $user->password = Hash::make($validated['password']);
-        $user->email_verified_at = now();
+        $user->email_verified_at = app_now();
         $user->save();
 
         return response()->json($user, 201);
@@ -70,9 +70,9 @@ class AdminUserController extends Controller
                     'name' => $data['name'] ?? '',
                     'email' => $data['email'],
                     'password' => Hash::make($data['password'] ?? '123456'),
-                    'email_verified_at' => now(),
-                    'created_at' => now(),
-                    'updated_at' => now(),
+                    'email_verified_at' => app_now(),
+                    'created_at' => app_now(),
+                    'updated_at' => app_now(),
                 ];
 
             } catch (\Exception $e) {

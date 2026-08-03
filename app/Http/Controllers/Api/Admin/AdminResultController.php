@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Assessment;
 use App\Models\AssessmentAssignment;
 use App\Models\AssessmentAttempt;
+use App\Models\Batch;
 use Illuminate\Http\Request;
 
 class AdminResultController extends Controller
@@ -35,7 +36,7 @@ class AdminResultController extends Controller
 
         foreach ($assessments as $assessment) {
 
-            $batches = \App\Models\Batch::where('assessment_id', $assessment->id)->get();
+            $batches = Batch::where('assessment_id', $assessment->id)->get();
 
             foreach ($batches as $batch) {
 
@@ -93,7 +94,7 @@ class AdminResultController extends Controller
         $batch = $result['batch'];
         $batchId = $batch?->id;
 
-        // 🔥 latest assignment per user
+        // latest assignment per user
         $assignments = AssessmentAssignment::where('assessment_id', $assessment_id)
             ->with('user:id,name')
             ->orderByDesc('id')

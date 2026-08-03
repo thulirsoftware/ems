@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AssessmentAssignment;
 use App\Models\Batch;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class UserAssessmentController extends Controller
 {
@@ -17,7 +18,10 @@ class UserAssessmentController extends Controller
         return Batch::whereIn('id', $batchIds)->get()->keyBy('id');
     }
 
-    private function resolveBatch($assignment, $batches)
+    // Helper to look up one assignment's batch in the preloaded map.
+    // Not to be confused with the global resolve_batch() helper, which
+    // resolves which batch a request applies to.
+    private function batchFor($assignment, $batches)
     {
         return $batches[$assignment->batch_id] ?? null;
     }
@@ -27,7 +31,7 @@ class UserAssessmentController extends Controller
         return $assignments->map(function ($assignment) use ($batches) {
 
             $assessment = $assignment->assessment;
-            $batch = $this->resolveBatch($assignment, $batches);
+            $batch = $this->batchFor($assignment, $batches);
 
             return [
                 ...$assessment->toArray(),
@@ -68,7 +72,7 @@ class UserAssessmentController extends Controller
             if (!$assessment->is_active)
                 return false;
 
-            $batch = $this->resolveBatch($assignment, $batches);
+            $batch = $this->batchFor($assignment, $batches);
 
             if (!$batch)
                 return false;
@@ -108,7 +112,7 @@ class UserAssessmentController extends Controller
             if (!$assessment->is_active)
                 return false;
 
-            $batch = $this->resolveBatch($assignment, $batches);
+            $batch = $this->batchFor($assignment, $batches);
 
             if (!$batch)
                 return false;
@@ -142,7 +146,7 @@ class UserAssessmentController extends Controller
             if (!$assessment->is_active)
                 return false;
 
-            $batch = $this->resolveBatch($assignment, $batches);
+            $batch = $this->batchFor($assignment, $batches);
 
             if (!$batch)
                 return false;
@@ -163,9 +167,9 @@ class UserAssessmentController extends Controller
             if (!$isRunning)
                 return false;
 
-            return !\DB::table('assessment_attempts')
+            return !DB::table('assessment_attempts')
                 ->where('assessment_id', $assessment->id)
-                ->where('batch_id', $assignment->batch_id) // ✅ FIX
+                ->where('batch_id', $assignment->batch_id)
                 ->where('user_id', $user->id)
                 ->whereNotNull('submitted_at')
                 ->exists();
@@ -178,7 +182,7 @@ class UserAssessmentController extends Controller
     {
         $user = $request->user('users');
 
-        $attempts = \DB::table('assessment_attempts')
+        $attempts = DB::table('assessment_attempts')
             ->where('user_id', $user->id)
             ->select('assessment_id', 'batch_id')
             ->get();
@@ -206,7 +210,7 @@ class UserAssessmentController extends Controller
         $today = app_now()->toDateString();
         $nowTime = app_now()->toTimeString();
 
-        $attempts = \DB::table('assessment_attempts')
+        $attempts = DB::table('assessment_attempts')
             ->where('user_id', $user->id)
             ->select('assessment_id', 'batch_id')
             ->get();
@@ -219,7 +223,7 @@ class UserAssessmentController extends Controller
 
         $filtered = $assignments->filter(function ($assignment) use ($attempts, $today, $nowTime, $batches) {
 
-            $batch = $this->resolveBatch($assignment, $batches);
+            $batch = $this->batchFor($assignment, $batches);
 
             if (!$assignment->assessment->is_active) {
                 return false;

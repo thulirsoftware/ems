@@ -8,8 +8,8 @@ use Illuminate\Http\Request;
 
 class AssessmentTypeController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return AssessmentType::latest()->get();
+        return response()->json(AssessmentType::latest()->get());
     }
 }

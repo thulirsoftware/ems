@@ -7,13 +7,16 @@ use App\Models\AssessmentAssignment;
 use App\Models\Assessment;
 use App\Models\Batch;
 use App\Services\NotificationService;
+use App\Models\AssessmentAttempt;
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class AssessmentAssignmentController extends Controller
 {
     private function isBatchLocked($batch_id)
     {
-        return \App\Models\AssessmentAttempt::where('batch_id', $batch_id)->exists();
+        return AssessmentAttempt::where('batch_id', $batch_id)->exists();
     }
 
     private function resolveBatch($assessment, $batchId = null)
@@ -29,7 +32,7 @@ class AssessmentAssignmentController extends Controller
                 ->firstOrFail();
         }
 
-        // 🔥 always latest batch for non-batch-wise (re-exam safe)
+        // always latest batch for non-batch-wise (re-exam safe)
         return Batch::where('assessment_id', $assessment->id)
             ->latest('id')
             ->firstOrFail();
@@ -50,11 +53,11 @@ class AssessmentAssignmentController extends Controller
         $batch = $this->resolveBatch($assessment, $request->query('batch_id'));
 
         $assignedUserIds = AssessmentAssignment::where('assessment_id', $assessment->id)
-            ->where('batch_id', $batch->id) // ✅ FIX
+            ->where('batch_id', $batch->id)
             ->pluck('user_id')
             ->toArray();
 
-        $users = \App\Models\User::select('id', 'name')
+        $users = User::select('id', 'name')
             ->get()
             ->map(function ($user) use ($assignedUserIds, $assessment, $batch) {
 
@@ -62,7 +65,7 @@ class AssessmentAssignmentController extends Controller
 
                 if (!$assessment->is_flexible) {
 
-                    $conflict = \DB::table('assessment_assignments as aa')
+                    $conflict = DB::table('assessment_assignments as aa')
                         ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
                         ->join('batches as b', 'b.id', '=', 'aa.batch_id')
                         ->where('aa.user_id', $user->id)
@@ -106,7 +109,7 @@ class AssessmentAssignmentController extends Controller
 
         $batch = $this->resolveBatch($assessment, $validated['batch_id'] ?? null);
 
-        // 🔒 lock after attempt
+        // lock after attempt
         if ($this->isBatchLocked($batch->id)) {
             return response()->json([
                 'message' => 'Cannot assign users after batch has been attempted'
@@ -122,7 +125,7 @@ class AssessmentAssignmentController extends Controller
 
             if (!$assessment->is_flexible) {
 
-                $conflict = \DB::table('assessment_assignments as aa')
+                $conflict = DB::table('assessment_assignments as aa')
                     ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
                     ->join('batches as b', 'b.id', '=', 'aa.batch_id')
                     ->where('aa.user_id', $userId)
@@ -145,7 +148,7 @@ class AssessmentAssignmentController extends Controller
                 continue;
             }
 
-            // 🔥 batch-aware assignment
+            // batch-aware assignment
             $assignment = AssessmentAssignment::withTrashed()
                 ->where('assessment_id', $assessment->id)
                 ->where('user_id', $userId)
@@ -200,14 +203,14 @@ class AssessmentAssignmentController extends Controller
 
         $batch = $this->resolveBatch($assessment, $validated['batch_id'] ?? null);
 
-        // 🔒 lock after attempt
+        // lock after attempt
         if ($this->isBatchLocked($batch->id)) {
             return response()->json([
                 'message' => 'Cannot unassign users after batch has been attempted'
             ], 403);
         }
 
-        // 🔥 batch-safe delete
+        // batch-safe delete
         $deleted = AssessmentAssignment::where('assessment_id', $assessment->id)
             ->where('batch_id', $batch->id)
             ->whereIn('user_id', $validated['user_ids'])

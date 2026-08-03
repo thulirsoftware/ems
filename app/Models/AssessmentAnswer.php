@@ -16,14 +16,14 @@ class AssessmentAnswer extends Model
         'is_correct',
     ];
 
-    protected $casts = [
-        'answer' => 'array',
-    ];
-
     protected $hidden = [
         'deleted_at',
         'created_at',
         'updated_at',
+    ];
+
+    protected $casts = [
+        'answer' => 'array',
     ];
 
     public function attempt()

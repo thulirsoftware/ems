@@ -17,14 +17,14 @@ class AssessmentQuestion extends Model
         'order',
     ];
 
-    protected $casts = [
-        'config' => 'array',
-    ];
-
     protected $hidden = [
         'deleted_at',
         'created_at',
         'updated_at',
+    ];
+
+    protected $casts = [
+        'config' => 'array',
     ];
 
     public function assessment()

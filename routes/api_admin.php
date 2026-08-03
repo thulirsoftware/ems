@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Api\Admin\AdminAuthController;
 use App\Http\Controllers\Api\Admin\AdminBatchController;
+use App\Http\Controllers\Api\Admin\AdminDashboardController;
+use App\Http\Controllers\Api\Admin\AdminReportController;
 use App\Http\Controllers\Api\Admin\AdminResultController;
 use App\Http\Controllers\Api\Admin\AdminUserController;
 use App\Http\Controllers\Api\Admin\AssessmentController;
@@ -49,6 +51,23 @@ Route::prefix('admin')->middleware('admin')->group(function () {
     Route::post('re-exam/filtered', [ReExamController::class, 'createFilteredReExam']);
 });
 
+// Admin dashboard
+Route::prefix('admin')->middleware('admin')->group(function () {
+    Route::get('dashboard', [AdminDashboardController::class, 'index']);
+});
+
+// Admin reports
+Route::prefix('admin')->middleware('admin')->group(function () {
+    Route::prefix('reports')->group(function () {
+        Route::get('summary', [AdminReportController::class, 'summary']);
+        Route::get('assessments', [AdminReportController::class, 'assessments']);
+        Route::get('batches', [AdminReportController::class, 'batches']);
+        Route::get('users', [AdminReportController::class, 'users']);
+        Route::get('questions', [AdminReportController::class, 'questions']);
+        Route::get('attempts', [AdminReportController::class, 'attempts']);
+    });
+});
+
 // Admin assessments
 Route::prefix('admin')->middleware('admin')->group(function () {
 
@@ -72,8 +91,8 @@ Route::prefix('admin')->middleware('admin')->group(function () {
     Route::delete('questions/{id}', [AssessmentQuestionController::class, 'destroy']);
     Route::get('assessments/{assessment_id}/questions/with-choices', [AssessmentQuestionController::class, 'indexWithChoices']);
     Route::post('assessments/{assessment_id}/questions/with-choices', [AssessmentQuestionController::class, 'storeWithChoices']);
-    Route::get('questions/{id}/with-choices', [AssessmentQuestionController::class, 'showWithChoices']);
-    Route::put('questions/{id}/with-choices', [AssessmentQuestionController::class, 'updateWithChoices']);
+    Route::get('questions/{question_id}/with-choices', [AssessmentQuestionController::class, 'showWithChoices']);
+    Route::put('questions/{question_id}/with-choices', [AssessmentQuestionController::class, 'updateWithChoices']);
     Route::post('questions/bulk-store/{assessment_id}', [AssessmentQuestionController::class, 'bulkStoreQuestions']);
 
     // Choices

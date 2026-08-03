@@ -23,7 +23,470 @@ components:
       scheme: bearer
       bearerFormat: JWT
 
+  parameters:
+    ReportAssessmentId:
+      name: assessment_id
+      in: query
+      required: false
+      description: Restrict the report to a single assessment
+      schema:
+        type: integer
+
+    ReportBatchId:
+      name: batch_id
+      in: query
+      required: false
+      description: Restrict the report to a single batch
+      schema:
+        type: integer
+
+    ReportUserId:
+      name: user_id
+      in: query
+      required: false
+      description: Restrict the report to a single candidate
+      schema:
+        type: integer
+
+    ReportAssessmentType:
+      name: assessment_type
+      in: query
+      required: false
+      description: Assessment type slug, e.g. mcq or descriptive
+      schema:
+        type: string
+
+    ReportStatus:
+      name: status
+      in: query
+      required: false
+      description: Restrict to attempts in a given state
+      schema:
+        type: string
+        enum: [in_progress, pending_evaluation, evaluated]
+
+    ReportPassingPercentage:
+      name: passing_percentage
+      in: query
+      required: false
+      description: Threshold used for pass/fail, defaults to 40
+      schema:
+        type: number
+        default: 40
+        minimum: 0
+        maximum: 100
+
+    ReportFrom:
+      name: from
+      in: query
+      required: false
+      description: >-
+        Start of the date range. Applied to the attempt's created_at, because
+        started_at and submitted_at are TIME columns with no date component.
+      schema:
+        type: string
+        format: date
+
+    ReportTo:
+      name: to
+      in: query
+      required: false
+      description: End of the date range, must be on or after `from`
+      schema:
+        type: string
+        format: date
+
+    ReportPage:
+      name: page
+      in: query
+      required: false
+      description: 1-based page number
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+
+    ReportPageSize:
+      name: page_size
+      in: query
+      required: false
+      description: Rows per page (max 200)
+      schema:
+        type: integer
+        default: 25
+        minimum: 1
+        maximum: 200
+
   schemas:
+    ReportFilters:
+      type: object
+      description: The filters that were actually supplied on the request, empty object when none
+      additionalProperties: true
+
+    ReportPerformance:
+      type: object
+      description: Score aggregates over the matching evaluated attempts
+      properties:
+        evaluated:
+          type: integer
+        average_percentage:
+          type: number
+        highest_percentage:
+          type: number
+        lowest_percentage:
+          type: number
+        passed:
+          type: integer
+        failed:
+          type: integer
+        pass_rate:
+          type: number
+
+    ReportScoreDistribution:
+      type: object
+      description: Evaluated attempt counts per percentage band
+      properties:
+        '0-39':
+          type: integer
+        '40-59':
+          type: integer
+        '60-79':
+          type: integer
+        '80-100':
+          type: integer
+
+    AdminReportAssessmentRow:
+      allOf:
+        - type: object
+          properties:
+            assessment_id:
+              type: integer
+            title:
+              type: string
+            type:
+              type: string
+              nullable: true
+            difficulty_level:
+              type: string
+              nullable: true
+            is_active:
+              type: boolean
+            is_batch_wise:
+              type: boolean
+            is_flexible:
+              type: boolean
+            questions:
+              type: integer
+            batches:
+              type: integer
+            assigned:
+              type: integer
+            attempts:
+              type: integer
+            in_progress:
+              type: integer
+            submitted:
+              type: integer
+            pending_evaluation:
+              type: integer
+        - $ref: '#/components/schemas/ReportPerformance'
+
+    AdminReportBatchRow:
+      allOf:
+        - type: object
+          properties:
+            batch_id:
+              type: integer
+            batch_name:
+              type: string
+            assessment_id:
+              type: integer
+            assessment_title:
+              type: string
+              nullable: true
+            status:
+              type: string
+              nullable: true
+              enum: [upcoming, running, finished, unscheduled]
+            publish_date:
+              type: string
+              format: date
+              nullable: true
+            start_time:
+              type: string
+              nullable: true
+            end_time:
+              type: string
+              nullable: true
+            expiry_date:
+              type: string
+              format: date
+              nullable: true
+            duration_minutes:
+              type: integer
+              nullable: true
+            capacity:
+              type: integer
+              nullable: true
+            assigned:
+              type: integer
+            attempts:
+              type: integer
+            submitted:
+              type: integer
+            participation_rate:
+              type: number
+        - $ref: '#/components/schemas/ReportPerformance'
+
+    AdminReportUserRow:
+      allOf:
+        - type: object
+          properties:
+            user_id:
+              type: integer
+            name:
+              type: string
+              nullable: true
+            email:
+              type: string
+              nullable: true
+            assigned:
+              type: integer
+            attempts:
+              type: integer
+            in_progress:
+              type: integer
+            submitted:
+              type: integer
+            pending_evaluation:
+              type: integer
+        - $ref: '#/components/schemas/ReportPerformance'
+
+    AdminReportQuestionRow:
+      type: object
+      properties:
+        question_id:
+          type: integer
+        assessment_id:
+          type: integer
+        assessment_title:
+          type: string
+          nullable: true
+        question_text:
+          type: string
+        type:
+          type: string
+          nullable: true
+        order:
+          type: integer
+          nullable: true
+        answered:
+          type: integer
+        correct:
+          type: integer
+        wrong:
+          type: integer
+        ungraded:
+          type: integer
+          description: Answers still awaiting manual grading
+        accuracy:
+          type: number
+          nullable: true
+          description: correct / graded as a percentage, null when nothing is graded
+        difficulty:
+          type: string
+          enum: [easy, medium, hard, not_attempted]
+          description: Derived from accuracy — easy >= 80, medium >= 50, else hard
+
+    AdminReportAttemptRow:
+      type: object
+      properties:
+        attempt_id:
+          type: integer
+        assessment_id:
+          type: integer
+        assessment_title:
+          type: string
+          nullable: true
+        batch_id:
+          type: integer
+          nullable: true
+        batch_name:
+          type: string
+          nullable: true
+        user_id:
+          type: integer
+        user_name:
+          type: string
+          nullable: true
+        user_email:
+          type: string
+          nullable: true
+        attempt_date:
+          type: string
+          format: date
+          nullable: true
+        started_at:
+          type: string
+          nullable: true
+          example: '17:22:47'
+        submitted_at:
+          type: string
+          nullable: true
+          example: '18:36:09'
+        status:
+          type: string
+          enum: [in_progress, pending_evaluation, evaluated]
+        score:
+          type: number
+          nullable: true
+        total_marks:
+          type: integer
+          nullable: true
+        percentage:
+          type: number
+          nullable: true
+        passed:
+          type: boolean
+          nullable: true
+          description: Null until the attempt is evaluated
+
+    UserReportAssessmentRow:
+      allOf:
+        - type: object
+          properties:
+            assessment_id:
+              type: integer
+            assessment_title:
+              type: string
+              nullable: true
+            type:
+              type: string
+              nullable: true
+            assigned:
+              type: integer
+            attempts:
+              type: integer
+            in_progress:
+              type: integer
+            submitted:
+              type: integer
+            pending_evaluation:
+              type: integer
+        - $ref: '#/components/schemas/ReportPerformance'
+
+    UserReportAttemptRow:
+      type: object
+      properties:
+        attempt_id:
+          type: integer
+        assessment_id:
+          type: integer
+        assessment_title:
+          type: string
+          nullable: true
+        type:
+          type: string
+          nullable: true
+        batch_id:
+          type: integer
+          nullable: true
+        batch_name:
+          type: string
+          nullable: true
+        attempt_date:
+          type: string
+          format: date
+          nullable: true
+        started_at:
+          type: string
+          nullable: true
+        submitted_at:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [in_progress, pending_evaluation, evaluated]
+        score:
+          type: number
+          nullable: true
+        total_marks:
+          type: integer
+          nullable: true
+        percentage:
+          type: number
+          nullable: true
+        passed:
+          type: boolean
+          nullable: true
+
+    UserReportQuestionRow:
+      type: object
+      properties:
+        attempt_id:
+          type: integer
+        assessment_id:
+          type: integer
+          nullable: true
+        assessment_title:
+          type: string
+          nullable: true
+        batch_id:
+          type: integer
+          nullable: true
+        question_id:
+          type: integer
+        question_text:
+          type: string
+          nullable: true
+        type:
+          type: string
+          nullable: true
+        order:
+          type: integer
+          nullable: true
+        answer:
+          nullable: true
+          description: The stored answer payload, shape depends on the assessment type
+        is_correct:
+          type: boolean
+          nullable: true
+          description: Null while the answer is not yet graded
+        graded:
+          type: boolean
+
+    UserReportProgressRow:
+      type: object
+      properties:
+        attempt_id:
+          type: integer
+        assessment_id:
+          type: integer
+        assessment_title:
+          type: string
+          nullable: true
+        batch_id:
+          type: integer
+          nullable: true
+        attempt_date:
+          type: string
+          format: date
+          nullable: true
+        submitted_at:
+          type: string
+          nullable: true
+        score:
+          type: number
+        total_marks:
+          type: integer
+        percentage:
+          type: number
+        passed:
+          type: boolean
+        running_average:
+          type: number
+          description: Cumulative average percentage up to and including this attempt
+
     Admin:
       type: object
       properties:
@@ -60,16 +523,50 @@ components:
         user:
           $ref: '#/components/schemas/User'
 
+    UserDashboardAssessment:
+      type: object
+      description: An assessment row on the user dashboard, with its batch schedule
+      properties:
+        assessment_id:
+          type: integer
+        assessment_title:
+          type: string
+          nullable: true
+        batch_id:
+          type: integer
+          nullable: true
+        publish_date:
+          type: string
+          format: date
+          nullable: true
+        start_time:
+          type: string
+          nullable: true
+          example: '09:00:00'
+        end_time:
+          type: string
+          nullable: true
+          example: '10:30:00'
+        expiry_date:
+          type: string
+          format: date
+          nullable: true
+        duration_minutes:
+          type: integer
+          nullable: true
+        is_flexible:
+          type: boolean
+
 security:
   - BearerAuth: []
 
 paths:
   # -------------------------------------------------------- Admin --------------------------------------------------------
   /admin/register:
-    security: []
     post:
       tags: [Admin Auth]
       summary: Register admin
+      security: []
       requestBody:
         required: true
         content:
@@ -89,10 +586,10 @@ paths:
           description: Admin created
 
   /admin/login:
-    security: []
     post:
       tags: [Admin Auth]
       summary: Login admin
+      security: []
       requestBody:
         required: true
         content:
@@ -938,12 +1435,12 @@ paths:
                 type: object
 
 
-  /admin/questions/{id}/with-choices:
+  /admin/questions/{question_id}/with-choices:
     get:
       tags: [Admin Assessment Questions]
       summary: Get single question with choices
       parameters:
-        - name: id
+        - name: question_id
           in: path
           required: true
           schema:
@@ -959,7 +1456,7 @@ paths:
       tags: [Admin Assessment Questions]
       summary: Update question with 4 choices
       parameters:
-        - name: id
+        - name: question_id
           in: path
           required: true
           schema:
@@ -1642,12 +2139,528 @@ paths:
         404:
           description: Assessment not found
 
+  /admin/dashboard:
+    get:
+      tags: [Admin Dashboard]
+      summary: Full admin dashboard
+      description: >-
+        Single aggregate endpoint for the admin dashboard. Returns assessment, batch,
+        candidate and attempt counters together with the score distribution, top
+        performers, next scheduled batches, latest attempts and the manual-grading
+        queue. Everything is scoped to assessments owned by the authenticated admin.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Size of each embedded list (default 5, max 50)
+          schema:
+            type: integer
+            default: 5
+            maximum: 50
+
+      responses:
+        '200':
+          description: Dashboard payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assessments:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      active:
+                        type: integer
+                      library:
+                        type: integer
+                      batch_wise:
+                        type: integer
+                      flexible:
+                        type: integer
+                      by_type:
+                        type: object
+                        description: Assessment count keyed by assessment type slug
+                        additionalProperties:
+                          type: integer
+                        example:
+                          mcq: 8
+                          descriptive: 2
+
+                  batches:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      upcoming:
+                        type: integer
+                      running:
+                        type: integer
+                      finished:
+                        type: integer
+
+                  questions:
+                    type: integer
+
+                  candidates:
+                    type: integer
+                    description: Distinct users assigned to the admin's assessments
+
+                  assignments:
+                    type: integer
+                    description: Total assignment rows across the admin's assessments
+
+                  attempts:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      in_progress:
+                        type: integer
+                        description: Started but not submitted
+                      submitted:
+                        type: integer
+                      pending_evaluation:
+                        type: integer
+                        description: Submitted, awaiting manual grading
+                      evaluated:
+                        type: integer
+                      completion_rate:
+                        type: number
+                        description: Submitted attempts as a percentage of assignments
+
+                  average_percentage:
+                    type: number
+                    description: Mean percentage over evaluated attempts, 0 when none
+
+                  score_distribution:
+                    type: object
+                    description: Evaluated attempt counts per percentage band
+                    properties:
+                      '0-39':
+                        type: integer
+                      '40-59':
+                        type: integer
+                      '60-79':
+                        type: integer
+                      '80-100':
+                        type: integer
+
+                  top_performers:
+                    type: array
+                    description: Highest average scorers, best first
+                    items:
+                      type: object
+                      properties:
+                        user_id:
+                          type: integer
+                        user_name:
+                          type: string
+                          nullable: true
+                        attempts:
+                          type: integer
+                        average_percentage:
+                          type: number
+
+                  upcoming_batches:
+                    type: array
+                    description: Next scheduled batches, soonest first
+                    items:
+                      type: object
+                      properties:
+                        batch_id:
+                          type: integer
+                        batch_name:
+                          type: string
+                        assessment_id:
+                          type: integer
+                        assessment_title:
+                          type: string
+                        publish_date:
+                          type: string
+                          format: date
+                          nullable: true
+                        start_time:
+                          type: string
+                          nullable: true
+                          example: '09:00:00'
+                        end_time:
+                          type: string
+                          nullable: true
+                          example: '10:30:00'
+                        capacity:
+                          type: integer
+                          nullable: true
+
+                  recent_attempts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        attempt_id:
+                          type: integer
+                        assessment_id:
+                          type: integer
+                        assessment_title:
+                          type: string
+                          nullable: true
+                        batch_id:
+                          type: integer
+                          nullable: true
+                        user_id:
+                          type: integer
+                        user_name:
+                          type: string
+                          nullable: true
+                        started_at:
+                          type: string
+                          nullable: true
+                          example: '17:22:47'
+                        submitted_at:
+                          type: string
+                          nullable: true
+                          example: '18:36:09'
+                        status:
+                          type: string
+                          enum: [in_progress, pending_evaluation, evaluated]
+                        score:
+                          type: number
+                          nullable: true
+                          description: Null unless the attempt is submitted and evaluated
+                        total_marks:
+                          type: integer
+                          nullable: true
+                        percentage:
+                          type: number
+                          nullable: true
+
+                  pending_evaluations:
+                    type: array
+                    description: Submitted attempts still waiting on manual grading
+                    items:
+                      type: object
+                      properties:
+                        attempt_id:
+                          type: integer
+                        assessment_id:
+                          type: integer
+                        assessment_title:
+                          type: string
+                          nullable: true
+                        batch_id:
+                          type: integer
+                          nullable: true
+                        user_id:
+                          type: integer
+                        user_name:
+                          type: string
+                          nullable: true
+                        submitted_at:
+                          type: string
+                          example: '18:36:09'
+        '401':
+          description: Unauthenticated
+
+  /admin/reports/summary:
+    get:
+      tags: [Admin Reports]
+      summary: Headline report across everything matching the filters
+      description: >-
+        Aggregate totals, participation and score performance for the assessments
+        owned by the authenticated admin. Every filter is optional and combines.
+      parameters:
+        - $ref: '#/components/parameters/ReportAssessmentId'
+        - $ref: '#/components/parameters/ReportBatchId'
+        - $ref: '#/components/parameters/ReportUserId'
+        - $ref: '#/components/parameters/ReportAssessmentType'
+        - $ref: '#/components/parameters/ReportStatus'
+        - $ref: '#/components/parameters/ReportPassingPercentage'
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+      responses:
+        '200':
+          description: Summary report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  filters:
+                    $ref: '#/components/schemas/ReportFilters'
+                  passing_percentage:
+                    type: number
+                  totals:
+                    type: object
+                    properties:
+                      assessments:
+                        type: integer
+                      batches:
+                        type: integer
+                      questions:
+                        type: integer
+                      candidates:
+                        type: integer
+                      assignments:
+                        type: integer
+                  attempts:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      in_progress:
+                        type: integer
+                      submitted:
+                        type: integer
+                      pending_evaluation:
+                        type: integer
+                  participation:
+                    type: object
+                    properties:
+                      assigned:
+                        type: integer
+                      attempted:
+                        type: integer
+                      not_attempted:
+                        type: integer
+                      participation_rate:
+                        type: number
+                  performance:
+                    $ref: '#/components/schemas/ReportPerformance'
+                  score_distribution:
+                    $ref: '#/components/schemas/ReportScoreDistribution'
+        '401':
+          description: Unauthenticated
+        '422':
+          description: Invalid filter values
+
+  /admin/reports/assessments:
+    get:
+      tags: [Admin Reports]
+      summary: One row per assessment
+      parameters:
+        - $ref: '#/components/parameters/ReportAssessmentId'
+        - $ref: '#/components/parameters/ReportBatchId'
+        - $ref: '#/components/parameters/ReportUserId'
+        - $ref: '#/components/parameters/ReportAssessmentType'
+        - $ref: '#/components/parameters/ReportStatus'
+        - $ref: '#/components/parameters/ReportPassingPercentage'
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+        - $ref: '#/components/parameters/ReportPage'
+        - $ref: '#/components/parameters/ReportPageSize'
+      responses:
+        '200':
+          description: Per-assessment report, most attempted first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  filters:
+                    $ref: '#/components/schemas/ReportFilters'
+                  passing_percentage:
+                    type: number
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminReportAssessmentRow'
+                  current_page:
+                    type: integer
+                  page_size:
+                    type: integer
+                  total:
+                    type: integer
+                  total_pages:
+                    type: integer
+        '401':
+          description: Unauthenticated
+        '422':
+          description: Invalid filter values
+
+  /admin/reports/batches:
+    get:
+      tags: [Admin Reports]
+      summary: One row per batch, with participation and schedule status
+      parameters:
+        - $ref: '#/components/parameters/ReportAssessmentId'
+        - $ref: '#/components/parameters/ReportBatchId'
+        - $ref: '#/components/parameters/ReportUserId'
+        - $ref: '#/components/parameters/ReportAssessmentType'
+        - $ref: '#/components/parameters/ReportStatus'
+        - $ref: '#/components/parameters/ReportPassingPercentage'
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+        - $ref: '#/components/parameters/ReportPage'
+        - $ref: '#/components/parameters/ReportPageSize'
+      responses:
+        '200':
+          description: Per-batch report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  filters:
+                    $ref: '#/components/schemas/ReportFilters'
+                  passing_percentage:
+                    type: number
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminReportBatchRow'
+                  current_page:
+                    type: integer
+                  page_size:
+                    type: integer
+                  total:
+                    type: integer
+                  total_pages:
+                    type: integer
+        '401':
+          description: Unauthenticated
+        '422':
+          description: Invalid filter values
+
+  /admin/reports/users:
+    get:
+      tags: [Admin Reports]
+      summary: One row per candidate, best average first
+      parameters:
+        - $ref: '#/components/parameters/ReportAssessmentId'
+        - $ref: '#/components/parameters/ReportBatchId'
+        - $ref: '#/components/parameters/ReportUserId'
+        - $ref: '#/components/parameters/ReportAssessmentType'
+        - $ref: '#/components/parameters/ReportStatus'
+        - $ref: '#/components/parameters/ReportPassingPercentage'
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+        - $ref: '#/components/parameters/ReportPage'
+        - $ref: '#/components/parameters/ReportPageSize'
+      responses:
+        '200':
+          description: Per-candidate report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  filters:
+                    $ref: '#/components/schemas/ReportFilters'
+                  passing_percentage:
+                    type: number
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminReportUserRow'
+                  current_page:
+                    type: integer
+                  page_size:
+                    type: integer
+                  total:
+                    type: integer
+                  total_pages:
+                    type: integer
+        '401':
+          description: Unauthenticated
+        '422':
+          description: Invalid filter values
+
+  /admin/reports/questions:
+    get:
+      tags: [Admin Reports]
+      summary: Question level analysis, hardest questions first
+      description: >-
+        Per-question accuracy across every matching attempt, sorted so the questions
+        candidates get wrong most often appear first. Useful for spotting bad or
+        overly hard questions.
+      parameters:
+        - $ref: '#/components/parameters/ReportAssessmentId'
+        - $ref: '#/components/parameters/ReportBatchId'
+        - $ref: '#/components/parameters/ReportUserId'
+        - $ref: '#/components/parameters/ReportAssessmentType'
+        - $ref: '#/components/parameters/ReportStatus'
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+        - $ref: '#/components/parameters/ReportPage'
+        - $ref: '#/components/parameters/ReportPageSize'
+      responses:
+        '200':
+          description: Per-question report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  filters:
+                    $ref: '#/components/schemas/ReportFilters'
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminReportQuestionRow'
+                  current_page:
+                    type: integer
+                  page_size:
+                    type: integer
+                  total:
+                    type: integer
+                  total_pages:
+                    type: integer
+        '401':
+          description: Unauthenticated
+        '422':
+          description: Invalid filter values
+
+  /admin/reports/attempts:
+    get:
+      tags: [Admin Reports]
+      summary: Detailed attempt log, newest first
+      parameters:
+        - $ref: '#/components/parameters/ReportAssessmentId'
+        - $ref: '#/components/parameters/ReportBatchId'
+        - $ref: '#/components/parameters/ReportUserId'
+        - $ref: '#/components/parameters/ReportAssessmentType'
+        - $ref: '#/components/parameters/ReportStatus'
+        - $ref: '#/components/parameters/ReportPassingPercentage'
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+        - $ref: '#/components/parameters/ReportPage'
+        - $ref: '#/components/parameters/ReportPageSize'
+      responses:
+        '200':
+          description: Attempt log
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  filters:
+                    $ref: '#/components/schemas/ReportFilters'
+                  passing_percentage:
+                    type: number
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminReportAttemptRow'
+                  current_page:
+                    type: integer
+                  page_size:
+                    type: integer
+                  total:
+                    type: integer
+                  total_pages:
+                    type: integer
+        '401':
+          description: Unauthenticated
+        '422':
+          description: Invalid filter values
+
   # -------------------------------------------------------- User --------------------------------------------------------
   /user/register:
-    security: []
     post:
       tags: [User Auth]
       summary: Register user
+      security: []
       requestBody:
         required: true
         content:
@@ -1668,10 +2681,10 @@ paths:
           description: User created
 
   /user/send-verification-code:
-    security: []
     post:
       tags: [User Auth]
       summary: Send email verification code
+      security: []
       requestBody:
         required: true
         content:
@@ -1687,10 +2700,10 @@ paths:
           description: Verification code sent
 
   /user/verify-email:
-    security: []
     post:
       tags: [User Auth]
       summary: Verify email using OTP
+      security: []
       requestBody:
         required: true
         content:
@@ -1708,10 +2721,10 @@ paths:
           description: Email verified
 
   /user/login:
-    security: []
     post:
       tags: [User Auth]
       summary: Login user
+      security: []
       requestBody:
         required: true
         content:
@@ -1888,13 +2901,13 @@ paths:
           description: Assessment not assigned to user
 
 
-  /user/assessments/{id}/start:
+  /user/assessments/{assessment_id}/start:
     post:
       tags: [User Assessment Attempts]
       summary: Start an assessment (create attempt)
       parameters:
         - in: path
-          name: id
+          name: assessment_id
           required: true
           schema:
             type: integer
@@ -1908,13 +2921,13 @@ paths:
         '404':
           description: Assessment not assigned or not found
 
-  /user/assessments/{id}/submit:
+  /user/assessments/{assessment_id}/submit:
     post:
       tags: [User Assessment Attempts]
       summary: Submit assessment and calculate result
       parameters:
         - in: path
-          name: id
+          name: assessment_id
           required: true
           schema:
             type: integer
@@ -1928,13 +2941,13 @@ paths:
         '422':
           description: Unsupported assessment type
   
-  /user/assessments/{id}/result:
+  /user/assessments/{assessment_id}/result:
     post:
       tags: [User Assessment Results]
       summary: Get assessment result with paginated questions
       parameters:
         - in: path
-          name: id
+          name: assessment_id
           required: true
           schema:
             type: integer
@@ -1958,13 +2971,13 @@ paths:
         '404':
           description: Attempt not found
   
-  /user/assessments/{id}/questions:
+  /user/assessments/{assessment_id}/questions:
     get:
       tags: [User Assessment Questions]
       summary: Get assessment questions (only if started and running)
       parameters:
         - in: path
-          name: id
+          name: assessment_id
           required: true
           schema:
             type: integer
@@ -1976,13 +2989,13 @@ paths:
         '404':
           description: Attempt not found or assessment not found
   
-  /user/assessments/{id}/answer:
+  /user/assessments/{assessment_id}/answer:
     post:
       tags: [User Assessment Answers]
       summary: Save or update answer for a question (type-aware)
       parameters:
         - in: path
-          name: id
+          name: assessment_id
           required: true
           schema:
             type: integer
@@ -2025,3 +3038,396 @@ paths:
       responses:
         200:
           description: All notifications marked as read
+
+  /user/dashboard:
+    get:
+      tags: [User Dashboard]
+      summary: Full user dashboard
+      description: >-
+        Single aggregate endpoint for the user dashboard. Returns assignment and result
+        counters together with the assessments the user can start now, what is coming
+        up, anything left in progress, the latest results and the full evaluated
+        history for a progress chart.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Size of each embedded list (default 5, max 50). Does not apply to performance.
+          schema:
+            type: integer
+            default: 5
+            maximum: 50
+
+      responses:
+        '200':
+          description: Dashboard payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assignments:
+                    type: object
+                    properties:
+                      assigned:
+                        type: integer
+                        description: Assignments deduped per assessment + batch
+                      available:
+                        type: integer
+                        description: Startable right now and not yet attempted
+                      upcoming:
+                        type: integer
+                      in_progress:
+                        type: integer
+                        description: Started but not submitted
+                      completed:
+                        type: integer
+                      missed:
+                        type: integer
+                        description: Window closed with no attempt
+
+                  results:
+                    type: object
+                    properties:
+                      submitted:
+                        type: integer
+                      pending_evaluation:
+                        type: integer
+                      evaluated:
+                        type: integer
+                      average_percentage:
+                        type: number
+                        description: Mean percentage over evaluated attempts, 0 when none
+                      best_percentage:
+                        type: number
+                      lowest_percentage:
+                        type: number
+
+                  available_now:
+                    type: array
+                    description: Assessments the user can start right now
+                    items:
+                      $ref: '#/components/schemas/UserDashboardAssessment'
+
+                  upcoming:
+                    type: array
+                    description: Scheduled but not yet open
+                    items:
+                      $ref: '#/components/schemas/UserDashboardAssessment'
+
+                  in_progress:
+                    type: array
+                    description: Started but not submitted
+                    items:
+                      $ref: '#/components/schemas/UserDashboardAssessment'
+
+                  recent_results:
+                    type: array
+                    description: Latest submitted attempts, newest first
+                    items:
+                      type: object
+                      properties:
+                        attempt_id:
+                          type: integer
+                        assessment_id:
+                          type: integer
+                        assessment_title:
+                          type: string
+                          nullable: true
+                        batch_id:
+                          type: integer
+                          nullable: true
+                        submitted_at:
+                          type: string
+                          example: '18:36:09'
+                        status:
+                          type: string
+                          enum: [pending_evaluation, evaluated]
+                        score:
+                          type: number
+                          nullable: true
+                          description: Null while the attempt is pending evaluation
+                        total_marks:
+                          type: integer
+                          nullable: true
+                        percentage:
+                          type: number
+                          nullable: true
+
+                  performance:
+                    type: array
+                    description: Every evaluated attempt, oldest first, for a progress chart
+                    items:
+                      type: object
+                      properties:
+                        attempt_id:
+                          type: integer
+                        assessment_id:
+                          type: integer
+                        assessment_title:
+                          type: string
+                          nullable: true
+                        batch_id:
+                          type: integer
+                          nullable: true
+                        submitted_at:
+                          type: string
+                          example: '18:36:09'
+                        score:
+                          type: number
+                        total_marks:
+                          type: integer
+                        percentage:
+                          type: number
+        '401':
+          description: Unauthenticated
+
+  /user/reports/summary:
+    get:
+      tags: [User Reports]
+      summary: Headline report for the logged-in user
+      description: >-
+        Totals, participation and score performance across the user's own attempts.
+        Every filter is optional and combines.
+      parameters:
+        - $ref: '#/components/parameters/ReportAssessmentId'
+        - $ref: '#/components/parameters/ReportBatchId'
+        - $ref: '#/components/parameters/ReportStatus'
+        - $ref: '#/components/parameters/ReportPassingPercentage'
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+      responses:
+        '200':
+          description: Summary report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  filters:
+                    $ref: '#/components/schemas/ReportFilters'
+                  passing_percentage:
+                    type: number
+                  totals:
+                    type: object
+                    properties:
+                      assigned:
+                        type: integer
+                      assessments:
+                        type: integer
+                  attempts:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      in_progress:
+                        type: integer
+                      submitted:
+                        type: integer
+                      pending_evaluation:
+                        type: integer
+                  participation:
+                    type: object
+                    properties:
+                      assigned:
+                        type: integer
+                      attempted:
+                        type: integer
+                      not_attempted:
+                        type: integer
+                      participation_rate:
+                        type: number
+                  performance:
+                    $ref: '#/components/schemas/ReportPerformance'
+                  score_distribution:
+                    $ref: '#/components/schemas/ReportScoreDistribution'
+        '401':
+          description: Unauthenticated
+        '422':
+          description: Invalid filter values
+
+  /user/reports/assessments:
+    get:
+      tags: [User Reports]
+      summary: One row per assessment the user has attempted
+      parameters:
+        - $ref: '#/components/parameters/ReportAssessmentId'
+        - $ref: '#/components/parameters/ReportBatchId'
+        - $ref: '#/components/parameters/ReportStatus'
+        - $ref: '#/components/parameters/ReportPassingPercentage'
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+        - $ref: '#/components/parameters/ReportPage'
+        - $ref: '#/components/parameters/ReportPageSize'
+      responses:
+        '200':
+          description: Per-assessment report, best average first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  filters:
+                    $ref: '#/components/schemas/ReportFilters'
+                  passing_percentage:
+                    type: number
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserReportAssessmentRow'
+                  current_page:
+                    type: integer
+                  page_size:
+                    type: integer
+                  total:
+                    type: integer
+                  total_pages:
+                    type: integer
+        '401':
+          description: Unauthenticated
+        '422':
+          description: Invalid filter values
+
+  /user/reports/attempts:
+    get:
+      tags: [User Reports]
+      summary: The user's own attempt history, newest first
+      parameters:
+        - $ref: '#/components/parameters/ReportAssessmentId'
+        - $ref: '#/components/parameters/ReportBatchId'
+        - $ref: '#/components/parameters/ReportStatus'
+        - $ref: '#/components/parameters/ReportPassingPercentage'
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+        - $ref: '#/components/parameters/ReportPage'
+        - $ref: '#/components/parameters/ReportPageSize'
+      responses:
+        '200':
+          description: Attempt history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  filters:
+                    $ref: '#/components/schemas/ReportFilters'
+                  passing_percentage:
+                    type: number
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserReportAttemptRow'
+                  current_page:
+                    type: integer
+                  page_size:
+                    type: integer
+                  total:
+                    type: integer
+                  total_pages:
+                    type: integer
+        '401':
+          description: Unauthenticated
+        '422':
+          description: Invalid filter values
+
+  /user/reports/questions:
+    get:
+      tags: [User Reports]
+      summary: Question level breakdown of the user's own answers
+      description: >-
+        One row per answer the user has given, with correctness where it has been
+        graded. Only submitted attempts are included, so this never reveals whether
+        an answer is correct while an attempt is still in progress.
+      parameters:
+        - $ref: '#/components/parameters/ReportAssessmentId'
+        - $ref: '#/components/parameters/ReportBatchId'
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+        - $ref: '#/components/parameters/ReportPage'
+        - $ref: '#/components/parameters/ReportPageSize'
+      responses:
+        '200':
+          description: Per-answer report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  filters:
+                    $ref: '#/components/schemas/ReportFilters'
+                  totals:
+                    type: object
+                    properties:
+                      answers:
+                        type: integer
+                      graded:
+                        type: integer
+                      correct:
+                        type: integer
+                      wrong:
+                        type: integer
+                      accuracy:
+                        type: number
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserReportQuestionRow'
+                  current_page:
+                    type: integer
+                  page_size:
+                    type: integer
+                  total:
+                    type: integer
+                  total_pages:
+                    type: integer
+        '401':
+          description: Unauthenticated
+        '422':
+          description: Invalid filter values
+
+  /user/reports/progress:
+    get:
+      tags: [User Reports]
+      summary: Evaluated attempts over time with a running average
+      description: >-
+        Chronological list of evaluated attempts, each carrying the cumulative average
+        up to that point, plus an overall trend (last percentage minus first).
+      parameters:
+        - $ref: '#/components/parameters/ReportAssessmentId'
+        - $ref: '#/components/parameters/ReportBatchId'
+        - $ref: '#/components/parameters/ReportPassingPercentage'
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+        - $ref: '#/components/parameters/ReportPage'
+        - $ref: '#/components/parameters/ReportPageSize'
+      responses:
+        '200':
+          description: Progress report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  filters:
+                    $ref: '#/components/schemas/ReportFilters'
+                  passing_percentage:
+                    type: number
+                  trend:
+                    type: number
+                    description: Last percentage minus first, 0 with fewer than two evaluated attempts
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserReportProgressRow'
+                  current_page:
+                    type: integer
+                  page_size:
+                    type: integer
+                  total:
+                    type: integer
+                  total_pages:
+                    type: integer
+        '401':
+          description: Unauthenticated
+        '422':
+          description: Invalid filter values

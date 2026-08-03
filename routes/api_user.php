@@ -3,7 +3,9 @@
 use App\Http\Controllers\Api\User\AssessmentAttemptController;
 use App\Http\Controllers\Api\User\UserAssessmentController;
 use App\Http\Controllers\Api\User\UserAuthController;
+use App\Http\Controllers\Api\User\UserDashboardController;
 use App\Http\Controllers\Api\User\UserNotificationController;
+use App\Http\Controllers\Api\User\UserReportController;
 use App\Http\Controllers\Api\User\UserQuestionController;
 use App\Http\Controllers\Api\User\UserAnswerController;
 
@@ -24,6 +26,18 @@ Route::prefix('user')->group(function () {
 // User assessments
 Route::prefix('user')->middleware('user')->group(function () {
 
+    // Dashboard
+    Route::get('dashboard', [UserDashboardController::class, 'index']);
+
+    // Reports
+    Route::prefix('reports')->group(function () {
+        Route::get('summary', [UserReportController::class, 'summary']);
+        Route::get('assessments', [UserReportController::class, 'assessments']);
+        Route::get('attempts', [UserReportController::class, 'attempts']);
+        Route::get('questions', [UserReportController::class, 'questions']);
+        Route::get('progress', [UserReportController::class, 'progress']);
+    });
+
     // Assessments
     Route::get('assessments/upcoming', [UserAssessmentController::class, 'upcoming']);
     Route::get('assessments/today', [UserAssessmentController::class, 'today']);
@@ -33,13 +47,13 @@ Route::prefix('user')->middleware('user')->group(function () {
     Route::get('assessments/{id}', [UserAssessmentController::class, 'show']);
 
     // Attempt control
-    Route::post('assessments/{id}/start', [AssessmentAttemptController::class, 'start']);
-    Route::post('assessments/{id}/submit', [AssessmentAttemptController::class, 'submit']);
-    Route::post('assessments/{id}/result', [AssessmentAttemptController::class, 'result']);
+    Route::post('assessments/{assessment_id}/start', [AssessmentAttemptController::class, 'start']);
+    Route::post('assessments/{assessment_id}/submit', [AssessmentAttemptController::class, 'submit']);
+    Route::post('assessments/{assessment_id}/result', [AssessmentAttemptController::class, 'result']);
 
     // Questions & answers
-    Route::get('assessments/{id}/questions', [UserQuestionController::class, 'index']);
-    Route::post('assessments/{id}/answer', [UserAnswerController::class, 'store']);
+    Route::get('assessments/{assessment_id}/questions', [UserQuestionController::class, 'index']);
+    Route::post('assessments/{assessment_id}/answer', [UserAnswerController::class, 'store']);
 
     // Notifications
     Route::get('notifications', [UserNotificationController::class, 'index']);

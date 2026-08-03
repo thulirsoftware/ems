@@ -3,10 +3,9 @@
 namespace App\Http\Controllers\Api\User;
 
 use App\Http\Controllers\Controller;
-use App\Models\Batch;
-use App\Models\Setting;
 use Illuminate\Http\Request;
 use App\Models\User;
+use App\Models\Otp;
 use Illuminate\Support\Facades\Hash;
 use App\Services\OtpService;
 use Illuminate\Support\Facades\Mail;
@@ -91,7 +90,7 @@ class UserAuthController extends Controller
             ], 422);
         }
 
-        $existing = \App\Models\Otp::where('user_id', $user->id)
+        $existing = Otp::where('user_id', $user->id)
             ->where('type', 'email_verification')
             ->where('expires_at', '>', app_now())
             ->first();
