@@ -1,0 +1,14 @@
+
+.unique-sidebar {
+    scrollbar-width: thin;
+    scrollbar-color: #a583ab transparent;
+}
+
+.unique-sidebar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.unique-sidebar::-webkit-scrollbar-thumb {
+    background: #a583ab;
+    border-radius: 10px;
+}

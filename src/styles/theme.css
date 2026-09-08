@@ -1,0 +1,99 @@
+:root {
+  --radius: 0.5rem;
+  --sidebar-bg: 0, 0%, 100%;
+  --sidebar-text: rgb(49, 49, 49);
+  --sidebar-hover-text: 292, 78%, 7%;
+  --sidebar-hover-bg: 0 0% 100%;
+  /* Light mode colors */
+  --background: 0 0% 100%;
+  --foreground: 222 47% 11%;
+  --page-header-text: 0, 0%, 4%;
+  --content-background-inside: 0, 0%, 100%;
+
+  --stat-card-bg-start: #0079db;
+  --stat-card-bg-end: #004e8e;
+  --stat-card-text: #ffffff;
+  --table-head-text: 0, 93%, 35%;
+  --table-body-text:0, 0%, 9%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+
+  --primary: 220 90% 56%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 210 50% 60%;
+  --secondary-foreground: 0 0% 100%;
+
+  --muted: 210 20% 96%;
+  --muted-foreground: 222 47% 11%;
+
+  --accent: 340 82% 52%;
+  --accent-foreground: 0 0% 100%;
+
+  --destructive: 0 78% 63%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 210 16% 93%;
+  --input: 210 16% 93%;
+  --ring: 220 90% 56%;
+
+  --chart-1: 220 90% 56%;
+  --chart-2: 340 82% 52%;
+  --chart-3: 48 100% 67%;
+  --chart-4: 195 100% 42%;
+  --chart-5: 280 87% 61%;
+}
+
+.dark {
+  /* Dark mode colors */
+  --background: 229, 85%, 5%;
+  --foreground: 0 0% 100%;
+  --sidebar-bg: 194, 100%, 8%;
+  --sidebar-hover-text: 193, 100%, 33%;
+  --sidebar-text: white;
+  --sidebar-hover-bg: 218, 36%, 18%;
+  --page-header-text: 0, 0%, 100%;
+  --content-background-inside: 223, 48%, 11%;
+
+  --stat-card-bg-start: #001f28;
+  --stat-card-bg-end: #001f28;
+  --stat-card-text: #f0f0f0;
+
+  --table-head-text: 0, 0%, 100%;
+  --table-body-text: 0, 0%, 100%;
+
+  --card: 222 47% 11%;
+  --card-foreground: 0 0% 100%;
+
+  --popover: 222 47% 11%;
+  --popover-foreground: 0 0% 100%;
+
+  --primary: 220 90% 66%;
+  --primary-foreground: 0 0% 0%;
+
+  --secondary: 210 50% 70%;
+  --secondary-foreground: 0 0% 0%;
+
+  --muted: 222 47% 11%;
+  --muted-foreground: 210 16% 93%;
+
+  --accent: 340 82% 62%;
+  --accent-foreground: 0 0% 0%;
+
+  --destructive: 0 78% 73%;
+  --destructive-foreground: 0 0% 0%;
+
+  --border: 222 47% 22%;
+  --input: 222 47% 22%;
+  --ring: 220 90% 66%;
+
+  --chart-1: 220 90% 66%;
+  --chart-2: 340 82% 62%;
+  --chart-3: 48 100% 77%;
+  --chart-4: 195 100% 52%;
+  --chart-5: 280 87% 71%;
+}
