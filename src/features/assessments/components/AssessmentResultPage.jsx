@@ -32,6 +32,10 @@ export default function AssessmentResultPage() {
       } else {
 
         console.error(err);
+        setResult({
+          status: "error",
+          message: err.response?.data?.message || "Unable to load your result right now."
+        });
 
       }
 
@@ -79,6 +83,24 @@ export default function AssessmentResultPage() {
 
         </div>
 
+      </section>
+    );
+  }
+
+  if (result?.status === "error" || !result) {
+    return (
+      <section className="flex items-center justify-center h-full bg-gray-50">
+        <div className="bg-white shadow-xl rounded-2xl p-10 text-center max-w-lg space-y-6">
+          <div className="text-6xl">⚠️</div>
+          <h2 className="text-2xl font-bold text-gray-800">Result unavailable</h2>
+          <p className="text-gray-600">{result?.message || "Unable to load your result right now."}</p>
+          <button
+            onClick={() => navigate("/assesments")}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Back to Assessments
+          </button>
+        </div>
       </section>
     );
   }

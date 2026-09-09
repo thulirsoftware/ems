@@ -1,5 +1,6 @@
 import { Bell, CheckCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import NotificationService from "../../../services/notification.service";
 
 export default function NotificationDropdown() {
@@ -10,10 +11,14 @@ export default function NotificationDropdown() {
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
-  // fetch notifications
+  // fetch notifications — backend only ever returns unread ones
   const loadNotifications = async () => {
-    const data = await NotificationService.getNotificationList();
-    setNotifications(data);
+    try {
+      const data = await NotificationService.getNotificationList();
+      setNotifications(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Failed to load notifications", err);
+    }
   };
 
   useEffect(() => {
@@ -33,8 +38,12 @@ export default function NotificationDropdown() {
 
   // mark all read
   const markAllRead = async () => {
-    await NotificationService.MarkNotification();
-    loadNotifications();
+    try {
+      await NotificationService.MarkNotification();
+      loadNotifications();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to update notifications.");
+    }
   };
 
   return (
@@ -66,22 +75,25 @@ export default function NotificationDropdown() {
           <div className="flex justify-between items-center px-4 py-3 border-b">
             <h4 className="font-semibold">Notifications</h4>
 
-            <button
-              onClick={markAllRead}
-              className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
-            >
-              <CheckCheck size={16}/>
-              Mark all
-            </button>
+            {unreadCount > 0 && (
+              <button
+                onClick={markAllRead}
+                className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
+              >
+                <CheckCheck size={16}/>
+                Mark all
+              </button>
+            )}
           </div>
 
           {/* LIST */}
           <div className="max-h-[400px] overflow-y-auto">
 
             {notifications.length === 0 && (
-              <p className="text-center text-gray-500 py-8">
-                No notifications
-              </p>
+              <div className="flex flex-col items-center gap-2 text-gray-400 py-10">
+                <Bell size={28} className="opacity-50" />
+                <p className="text-sm text-gray-500">You're all caught up</p>
+              </div>
             )}
 
             {notifications.map((n) => (

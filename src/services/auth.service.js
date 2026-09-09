@@ -48,10 +48,6 @@ const authService = {
     const res = await http.post("/user/logout");
     return res.data;
   },
-  verifyEmail: async ({ email, code }) => {
-    const res = await http.post("/user/verify-email", { email, code });
-    return res.data;
-  }
 };
 
 export default authService;

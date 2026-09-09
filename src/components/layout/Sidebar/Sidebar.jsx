@@ -1,38 +1,18 @@
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import { motion } from "framer-motion";
-import { X, Sun, Moon } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { X } from "lucide-react";
+import { useEffect } from "react";
 import { useSidebarStore } from "../../../store/sidebarStore";
-import { useAuthStore } from "../../../store/authStore";
 import { useMenuBuilder } from "../../../lib/menuBuilder";
 import { cn } from "../../../lib/utils";
 import logo_img from '../../../assets/images/header-logo/thulir-logo-1.png'
 import "../Sidebar/Sidebar.css";
 
 export default function Sidebar() {
-  const navigate = useNavigate();
-
   // stores
   const { isOpen, toggleSidebar, closeSidebar, openSidebar } = useSidebarStore();
-  const { role, logout } = useAuthStore();
-
 
   const menu = useMenuBuilder();
-
-  const [openSettings, setOpenSettings] = useState(false);
-  const popupRef = useRef(null);
-
-  // close popup when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (popupRef.current && !popupRef.current.contains(e.target)) {
-        setOpenSettings(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   // keep sidebar open on desktop
   useEffect(() => {
@@ -45,10 +25,6 @@ export default function Sidebar() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, [openSidebar]);
-
-  const roleTitle = role
-    ? role.replace(/_/g, " ").toUpperCase()
-    : "USER PANEL";
 
   return (
     <>
@@ -110,13 +86,6 @@ export default function Sidebar() {
             </NavLink>
           ))}
         </nav>
-
-        {/* BOTTOM SECTION */}
-        <div className="border-t border-white/20 p-3 space-y-2">
-          
-
-          
-        </div>
       </motion.aside>
     </>
   );

@@ -7,7 +7,6 @@ import ProtectedRoute from "../routes/ProtectedRoute";
 import AdminLayout from "../layouts/AdminLayout";
 import RootRedirect from "./RootRedirect";
 import Dashboard from "../features/dashboard/dashboard/pages/Dashboard";
-import UserList from "../features/users/pages/UserList";
 import AssessmentList from "../features/assessments/pages/AssessmentList";
 import ResultList from "../features/results/pages/ResultList";
 import RunningAssessmentDetails from "../features/assessments/components/RunningAssessmentDetails";

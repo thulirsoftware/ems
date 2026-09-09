@@ -1,71 +1,20 @@
-export default function ReportTable() {
+function statusLabel(row) {
+  if (!row.evaluated) return "Not Evaluated";
+  if (row.pass_rate === 100) return "Passed";
+  if (row.pass_rate === 0) return "Failed";
+  return "Mixed";
+}
 
-  const reports = [
-    {
-      exam: "React Assessment",
-      attempts: 2,
-      highest: 85,
-      average: 78,
-      lastAttempt: "12 Feb 2026",
-      status: "Passed",
-    },
-    {
-      exam: "Python Coding",
-      attempts: 1,
-      highest: 65,
-      average: 65,
-      lastAttempt: "05 Feb 2026",
-      status: "Failed",
-    },
-    {
-      exam: "JavaScript Fundamentals",
-      attempts: 3,
-      highest: 90,
-      average: 82,
-      lastAttempt: "18 Feb 2026",
-      status: "Passed",
-    },
-    {
-      exam: "SQL Database Test",
-      attempts: 2,
-      highest: 72,
-      average: 69,
-      lastAttempt: "10 Feb 2026",
-      status: "Passed",
-    },
-    {
-      exam: "Aptitude Assessment",
-      attempts: 1,
-      highest: 58,
-      average: 58,
-      lastAttempt: "02 Feb 2026",
-      status: "Failed",
-    },
-    {
-      exam: "HTML & CSS",
-      attempts: 2,
-      highest: 88,
-      average: 84,
-      lastAttempt: "20 Feb 2026",
-      status: "Passed",
-    },
-    {
-      exam: "Data Structures",
-      attempts: 3,
-      highest: 76,
-      average: 71,
-      lastAttempt: "15 Feb 2026",
-      status: "Passed",
-    },
-    {
-      exam: "Logical Reasoning",
-      attempts: 1,
-      highest: 62,
-      average: 62,
-      lastAttempt: "08 Feb 2026",
-      status: "Failed",
-    },
-  ];
+function statusClasses(row) {
+  const label = statusLabel(row);
+
+  if (label === "Passed") return "bg-green-100 text-green-700";
+  if (label === "Failed") return "bg-red-100 text-red-700";
+  if (label === "Mixed") return "bg-yellow-100 text-yellow-700";
+  return "bg-gray-100 text-gray-600";
+}
+
+export default function ReportTable({ rows = [], loading }) {
 
   return (
     <div className="bg-white border rounded-xl">
@@ -83,29 +32,38 @@ export default function ReportTable() {
             <th>Attempts</th>
             <th>Highest</th>
             <th>Average</th>
-            <th>Last Attempt</th>
             <th>Status</th>
           </tr>
         </thead>
 
         <tbody>
-          {reports.map((r, i) => (
-            <tr key={i} className="border-t hover:bg-gray-50">
-              <td className="p-4 font-medium">{r.exam}</td>
-              <td align="center">{r.attempts}</td>
-              <td align="center">{r.highest}%</td>
-              <td align="center">{r.average}%</td>
-              <td align="center">{r.lastAttempt}</td>
-              <td align="center">
-                <span className={`px-3 py-1 rounded-md text-xs ${r.status === "Passed"
-                    ? "bg-green-100 text-green-700"
-                    : "bg-red-100 text-red-700"
-                  }`}>
-                  {r.status}
-                </span>
+          {loading ? (
+            <tr>
+              <td colSpan="5" className="text-center py-8 text-gray-400">
+                Loading...
               </td>
             </tr>
-          ))}
+          ) : rows.length === 0 ? (
+            <tr>
+              <td colSpan="5" className="text-center py-8 text-gray-400">
+                No assessments found
+              </td>
+            </tr>
+          ) : (
+            rows.map((r) => (
+              <tr key={r.assessment_id} className="border-t hover:bg-gray-50">
+                <td className="p-4 font-medium">{r.assessment_title}</td>
+                <td align="center">{r.attempts}</td>
+                <td align="center">{r.highest_percentage ?? "-"}{r.highest_percentage !== null && r.highest_percentage !== undefined ? "%" : ""}</td>
+                <td align="center">{r.average_percentage ?? "-"}{r.average_percentage !== null && r.average_percentage !== undefined ? "%" : ""}</td>
+                <td align="center">
+                  <span className={`px-3 py-1 rounded-md text-xs ${statusClasses(r)}`}>
+                    {statusLabel(r)}
+                  </span>
+                </td>
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
 

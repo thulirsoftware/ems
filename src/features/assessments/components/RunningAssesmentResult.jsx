@@ -32,6 +32,10 @@ export default function RunningAssessmentResultPage() {
       } else {
 
         console.error(err);
+        setResult({
+          status: "error",
+          message: err.response?.data?.message || "Unable to load your result right now."
+        });
 
       }
 
@@ -77,6 +81,24 @@ export default function RunningAssessmentResultPage() {
 
         </div>
 
+      </section>
+    );
+  }
+
+  if (result?.status === "error" || !result) {
+    return (
+      <section className="h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50">
+        <div className="bg-white rounded-3xl shadow-xl p-10 max-w-lg text-center space-y-6">
+          <div className="text-6xl">⚠️</div>
+          <h1 className="text-2xl font-bold text-gray-800">Result unavailable</h1>
+          <p className="text-gray-600">{result?.message || "Unable to load your result right now."}</p>
+          <button
+            onClick={() => navigate("/")}
+            className="mt-4 px-6 py-3 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+          >
+            Go to Dashboard
+          </button>
+        </div>
       </section>
     );
   }

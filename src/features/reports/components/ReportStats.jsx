@@ -1,11 +1,14 @@
 import { Trophy, BarChart3, CheckCircle } from "lucide-react";
 
-export default function ReportStats() {
+export default function ReportStats({ summary, loading }) {
+
+  const totals = summary?.totals || {};
+  const performance = summary?.performance || {};
 
   const stats = [
-    { title: "Total Exams", value: 24, icon: BarChart3 },
-    { title: "Average Score", value: "81%", icon: Trophy },
-    { title: "Pass Rate", value: "87%", icon: CheckCircle },
+    { title: "Total Exams", value: totals.assessments ?? 0, icon: BarChart3 },
+    { title: "Average Score", value: `${performance.average_percentage ?? 0}%`, icon: Trophy },
+    { title: "Pass Rate", value: `${performance.pass_rate ?? 0}%`, icon: CheckCircle },
   ];
 
   return (
@@ -17,7 +20,7 @@ export default function ReportStats() {
           <div key={i} className="bg-white p-5 rounded-2xl shadow-sm flex justify-between items-center">
             <div>
               <p className="text-gray-500 text-sm">{s.title}</p>
-              <h2 className="text-2xl font-bold">{s.value}</h2>
+              <h2 className="text-2xl font-bold">{loading ? "-" : s.value}</h2>
             </div>
 
             <div className="bg-blue-100 p-3 rounded-xl text-blue-600">

@@ -1,66 +1,100 @@
-import { useEffect, useState } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import AssessmentService from "../../../services/assesment.service";
+import ConfirmDialog from "../../../components/common/ConfirmDialog";
 
 export default function RunningAssessmentQuestions() {
     const { examid, attemptId } = useParams();
     const navigate = useNavigate();
-    const location = useLocation();
 
-    // exam meta coming from details page navigation
-    const examMeta = location.state;
-
+    const [examMeta, setExamMeta] = useState(null);
     const [questions, setQuestions] = useState([]);
     const [current, setCurrent] = useState(0);
     const [answers, setAnswers] = useState({});
+    // null = no countdown to show yet / no fixed duration for this exam
     const [timeLeft, setTimeLeft] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
+    const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
+
+    const answerTimers = useRef({});
 
     /* --------------------------------------------------
-       ✅ CALCULATE REMAINING TIME FROM END DATETIME
+       CALCULATE REMAINING TIME
+       The backend is the authority on expiry (it re-checks the window on
+       every /answer call regardless of what the client shows), so this is
+       a best-effort display only:
+       - non-flexible assessments: deadline = batch publish_date + end_time,
+         which is available from GetAssessmentById on every load — safe
+         across refreshes.
+       - flexible assessments with a fixed duration: the backend anchors
+         the deadline to the attempt's created_at, but that field is never
+         returned to the client. We anchor a local copy the first time this
+         attempt is opened (in localStorage, keyed by attempt id) so a page
+         refresh doesn't reset the countdown to zero.
+       - flexible assessments without a fixed duration: no countdown.
     -------------------------------------------------- */
-    const calculateRemainingTime = () => {
-        if (!examMeta) return 0;
+    const calculateRemainingTime = (meta) => {
+        if (!meta) return null;
 
-        const { publish_date, end_time } = examMeta;
+        if (!meta.is_flexible) {
+            if (!meta.publish_date || !meta.end_time) return null;
+            const examEnd = new Date(`${meta.publish_date}T${meta.end_time}`);
+            const diff = Math.floor((examEnd - new Date()) / 1000);
+            return diff > 0 ? diff : 0;
+        }
 
-        // exam end datetime
-        const examEnd = new Date(`${publish_date}T${end_time}`);
+        if (meta.duration_minutes) {
+            const key = `attempt_start_${attemptId}`;
+            let startedAtMs = Number(localStorage.getItem(key)) || 0;
+            if (!startedAtMs) {
+                startedAtMs = Date.now();
+                localStorage.setItem(key, String(startedAtMs));
+            }
+            const deadline = startedAtMs + meta.duration_minutes * 60 * 1000;
+            const diff = Math.floor((deadline - Date.now()) / 1000);
+            return diff > 0 ? diff : 0;
+        }
 
-        // current time
-        const now = new Date();
-
-        const diff = Math.floor((examEnd - now) / 1000);
-
-        return diff > 0 ? diff : 0;
+        return null;
     };
 
     /* --------------------------------------------------
-       LOAD QUESTIONS
+       LOAD ASSESSMENT META + QUESTIONS
     -------------------------------------------------- */
     useEffect(() => {
-        if (examid && attemptId) loadQuestions();
-    }, [examid, attemptId]);
+        if (!examid) return;
+        let cancelled = false;
 
-    const loadQuestions = async () => {
-        try {
-            const data =
-                await AssessmentService.GetAssessmentQuestions(
-                    examid,
-                    attemptId
-                );
+        (async () => {
+            try {
+                const [meta, data] = await Promise.all([
+                    AssessmentService.GetAssessmentById(examid).catch(() => null),
+                    AssessmentService.GetAssessmentQuestions(examid),
+                ]);
 
-            setQuestions(data);
+                if (cancelled) return;
+                setExamMeta(meta);
+                setQuestions(Array.isArray(data) ? data : []);
+                setTimeLeft(calculateRemainingTime(meta));
+            } catch (err) {
+                if (cancelled) return;
+                const message =
+                    err.response?.data?.message ||
+                    "This assessment is not currently available.";
+                toast.error(message);
+                navigate("/assesments");
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
 
-            // ✅ dynamic timer from exam end time
-            setTimeLeft(calculateRemainingTime());
-        } catch (err) {
-            console.error("Assessment not started or expired");
-            navigate("/assesments");
-        } finally {
-            setLoading(false);
-        }
-    };
+        return () => {
+            cancelled = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [examid]);
 
     /* --------------------------------------------------
        TIMER RUNNER
@@ -69,19 +103,50 @@ export default function RunningAssessmentQuestions() {
         if (timeLeft === null) return;
 
         if (timeLeft <= 0) {
-            submitExam();
+            submitExam(true);
             return;
         }
 
         const timer = setInterval(() => {
-            setTimeLeft((t) => t - 1);
+            setTimeLeft((t) => (t === null ? t : t - 1));
         }, 1000);
 
         return () => clearInterval(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [timeLeft]);
 
+    useEffect(() => {
+        const timers = answerTimers.current;
+        return () => {
+            Object.values(timers).forEach(clearTimeout);
+        };
+    }, []);
+
     /* --------------------------------------------------
-       ANSWER SELECT
+       WARN BEFORE LEAVING — closing/refreshing mid-exam is easy to do by
+       accident and re-entering loses your place in the question list.
+    -------------------------------------------------- */
+    useEffect(() => {
+        const handler = (e) => {
+            e.preventDefault();
+            e.returnValue = "";
+        };
+        window.addEventListener("beforeunload", handler);
+        return () => window.removeEventListener("beforeunload", handler);
+    }, []);
+
+    const reportSaveError = (err) => {
+        const message = err.response?.data?.message;
+        toast.error(
+            message ||
+                (err.response?.status === 403
+                    ? "This assessment is no longer accepting answers."
+                    : "Failed to save your answer.")
+        );
+    };
+
+    /* --------------------------------------------------
+       ANSWER SELECT (MCQ) — safe to call repeatedly, backend upserts
     -------------------------------------------------- */
     const handleOptionSelect = async (questionId, optionId) => {
         setAnswers((prev) => ({
@@ -93,87 +158,62 @@ export default function RunningAssessmentQuestions() {
                 question_id: questionId,
                 choice_id: optionId,
             });
-
-            console.log("Answer saved:", questionId, optionId);
-
         } catch (err) {
-            console.error(
-                "Failed to save answer",
-                err.response?.data || err.message
-            );
+            reportSaveError(err);
         }
     };
-    const handleTextAnswer = async (questionId, text) => {
 
-        setAnswers(prev => ({
+    /* --------------------------------------------------
+       TEXT ANSWER — debounced autosave (previously fired on every keystroke)
+    -------------------------------------------------- */
+    const handleTextAnswer = (questionId, text) => {
+        setAnswers((prev) => ({
             ...prev,
-            [questionId]: text
+            [questionId]: text,
         }));
 
-        try {
-
-            await AssessmentService.SaveAnswer(examid, {
-                question_id: questionId,
-                answer: text
-            });
-
-            console.log("Text answer saved");
-
-        } catch (err) {
-
-            console.error(
-                "Save failed",
-                err.response?.data || err.message
-            );
-
-        }
-
+        clearTimeout(answerTimers.current[questionId]);
+        answerTimers.current[questionId] = setTimeout(async () => {
+            try {
+                await AssessmentService.SaveAnswer(examid, {
+                    question_id: questionId,
+                    answer: text,
+                });
+            } catch (err) {
+                reportSaveError(err);
+            }
+        }, 600);
     };
 
     /* --------------------------------------------------
        SUBMIT EXAM
+       The backend scores from answers already saved via the calls above —
+       submit itself takes no payload.
     -------------------------------------------------- */
-    const submitExam = async () => {
+    const submitExam = async (auto = false) => {
+        if (submitting) return;
+
+        if (!auto && !confirmSubmitOpen) {
+            setConfirmSubmitOpen(true);
+            return;
+        }
+
+        setSubmitting(true);
         try {
-            const payload = {
-                answers: Object.entries(answers).map(
-                    ([question_id, value]) => {
-
-                        const question = questions.find(
-                            q => q.id === Number(question_id)
-                        );
-
-                        if (question.type === "MCQ") {
-
-                            return {
-                                question_id: Number(question_id),
-                                choice_id: Number(value)
-                            };
-
-                        } else {
-
-                            return {
-                                question_id: Number(question_id),
-                                answer: value
-                            };
-
-                        }
-
-                    }
-                ),
-            };
-
-            await AssessmentService.SubmitAssessment(
-                examid,
-                attemptId,
-                payload
-            );
-
+            await AssessmentService.SubmitAssessment(examid);
             localStorage.removeItem("running_attempt");
-
+            localStorage.removeItem(`attempt_start_${attemptId}`);
             navigate(`/assesments/end/${examid}/result`);
         } catch (err) {
-            console.error("Submit failed", err);
+            if (err.response?.status === 400) {
+                // Already submitted (e.g. auto-submit racing a manual click) —
+                // the attempt is finalized either way, just go to the result.
+                navigate(`/assesments/end/${examid}/result`);
+                return;
+            }
+            toast.error(err.response?.data?.message || "Failed to submit assessment.");
+            setSubmitting(false);
+            setConfirmSubmitOpen(false);
         }
     };
 
@@ -204,10 +244,12 @@ export default function RunningAssessmentQuestions() {
                     Question {current + 1} / {questions.length}
                 </h2>
 
-                <p className="text-red-600 font-bold">
-                    ⏱ {Math.floor(timeLeft / 60)}:
-                    {(timeLeft % 60).toString().padStart(2, "0")}
-                </p>
+                {timeLeft !== null && (
+                    <p className="text-red-600 font-bold">
+                        ⏱ {Math.floor(timeLeft / 60)}:
+                        {(timeLeft % 60).toString().padStart(2, "0")}
+                    </p>
+                )}
             </div>
 
             {/* QUESTION */}
@@ -275,10 +317,11 @@ export default function RunningAssessmentQuestions() {
 
                 {current === questions.length - 1 ? (
                     <button
-                        onClick={submitExam}
-                        className="px-6 py-2 bg-green-600 text-white rounded"
+                        onClick={() => submitExam(false)}
+                        disabled={submitting}
+                        className="px-6 py-2 bg-green-600 text-white rounded disabled:opacity-50"
                     >
-                        Submit Exam
+                        {submitting ? "Submitting..." : "Submit Exam"}
                     </button>
                 ) : (
                     <button
@@ -289,6 +332,17 @@ export default function RunningAssessmentQuestions() {
                     </button>
                 )}
             </div>
+
+            <ConfirmDialog
+                open={confirmSubmitOpen}
+                title="Submit this assessment?"
+                description="You won't be able to change your answers afterward."
+                confirmLabel="Submit"
+                confirmClass="bg-green-600 hover:bg-green-700"
+                loading={submitting}
+                onConfirm={() => submitExam(false)}
+                onCancel={() => setConfirmSubmitOpen(false)}
+            />
         </section>
     );
 }

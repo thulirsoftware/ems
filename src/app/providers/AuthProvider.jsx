@@ -27,7 +27,11 @@ export default function AuthProvider({ children }) {
         const res = await authService.me();
         login(token, res);
       } catch (err) {
-        logout();
+        // Only drop the session on a real auth failure — a network error
+        // (backend down, offline) shouldn't log out a still-valid token.
+        if (err?.response?.status === 401) {
+          logout();
+        }
       } finally {
         setLoading(false);
       }

@@ -40,6 +40,7 @@ export default function Login() {
     const [otp, setOtp] = useState(Array(6).fill(""));
     const otpRefs = useRef([]);
     const [otpEmail, setOtpEmail] = useState("");
+    const [resendCooldown, setResendCooldown] = useState(0);
 
     const schema = mode === "signin" ? loginSchema : registerSchema;
 
@@ -60,6 +61,14 @@ export default function Login() {
         }, 4000);
         return () => clearInterval(timer);
     }, []);
+
+    useEffect(() => {
+        if (resendCooldown <= 0) return;
+        const timer = setInterval(() => {
+            setResendCooldown((s) => (s <= 1 ? 0 : s - 1));
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [resendCooldown]);
 
     /* ---------------- SUBMIT ---------------- */
 
@@ -82,11 +91,23 @@ export default function Login() {
 
                 setOtpEmail(data.email);
                 setMode("otp");
+                setResendCooldown(30);
                 toast.success("Verification code sent to your email");
                 reset();
             }
         } catch (err) {
-            toast.error(err?.response?.data?.message || "Something went wrong");
+            const status = err?.response?.status;
+            const message = err?.response?.data?.message || "Something went wrong";
+
+            // Backend rejects login with 403 until the email is verified —
+            // send the user back into the OTP flow instead of a dead-end error.
+            if (mode === "signin" && status === 403) {
+                toast.error(message);
+                setOtpEmail(data.email);
+                setMode("otp");
+            } else {
+                toast.error(message);
+            }
         } finally {
             setLoading(false);
         }
@@ -106,6 +127,39 @@ export default function Login() {
         }
     };
 
+    const handleOtpKeyDown = (e, index) => {
+        if (e.key === "Backspace" && !otp[index] && index > 0) {
+            otpRefs.current[index - 1].focus();
+        }
+    };
+
+    const handleOtpPaste = (e) => {
+        const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+        if (!pasted) return;
+        e.preventDefault();
+
+        const newOtp = Array(6).fill("");
+        pasted.split("").forEach((digit, i) => {
+            newOtp[i] = digit;
+        });
+        setOtp(newOtp);
+        otpRefs.current[Math.min(pasted.length, 5)]?.focus();
+    };
+
+    const handleResendOtp = async () => {
+        if (resendCooldown > 0) return;
+
+        try {
+            await authService.sendVerificationCode(otpEmail);
+            setOtp(Array(6).fill(""));
+            otpRefs.current[0]?.focus();
+            setResendCooldown(30);
+            toast.success("Verification code resent");
+        } catch (err) {
+            toast.error(err?.response?.data?.message || "Failed to resend code");
+        }
+    };
+
     const handleVerifyOtp = async () => {
         const code = otp.join("");
 
@@ -117,18 +171,16 @@ export default function Login() {
         try {
             setLoading(true);
 
-            const res = await authService.verifyEmail({
+            await authService.verifyEmail({
                 email: otpEmail,
                 code,
             });
 
-            // Optional: backend may return token here
-            if (res?.token) {
-                loginStore(res.token, res.user);
-            }
-
-            toast.success("Email verified successfully");
-            navigate("/dashboard", { replace: true });
+            // Backend's verify-email endpoint only confirms the email — it
+            // never issues a token, so the user still has to sign in.
+            toast.success("Email verified! Please sign in.");
+            setMode("signin");
+            reset({ email: otpEmail, password: "" });
         } catch (err) {
             toast.error(err?.response?.data?.message || "Invalid code");
         } finally {
@@ -220,11 +272,15 @@ export default function Login() {
                                     <input
                                         key={i}
                                         ref={(el) => (otpRefs.current[i] = el)}
+                                        inputMode="numeric"
+                                        autoComplete="one-time-code"
                                         maxLength={1}
                                         value={digit}
                                         onChange={(e) =>
                                             handleOtpChange(e.target.value, i)
                                         }
+                                        onKeyDown={(e) => handleOtpKeyDown(e, i)}
+                                        onPaste={handleOtpPaste}
                                         className="w-12 h-12 text-center text-lg border rounded-lg"
                                     />
                                 ))}
@@ -233,10 +289,24 @@ export default function Login() {
                             <button
                                 onClick={handleVerifyOtp}
                                 disabled={loading}
-                                className="w-full py-3 rounded-lg bg-[#1e3a8a] text-white font-semibold"
+                                className="w-full py-3 rounded-lg bg-[#1e3a8a] text-white font-semibold disabled:opacity-60"
                             >
                                 {loading ? "Verifying..." : "Verify & Continue"}
                             </button>
+
+                            <div className="mt-4 text-center text-sm text-gray-600">
+                                Didn't get the code?{" "}
+                                <button
+                                    type="button"
+                                    onClick={handleResendOtp}
+                                    disabled={resendCooldown > 0}
+                                    className="text-[#1e3a8a] font-semibold hover:underline disabled:text-gray-400 disabled:no-underline disabled:cursor-not-allowed"
+                                >
+                                    {resendCooldown > 0
+                                        ? `Resend in ${resendCooldown}s`
+                                        : "Resend code"}
+                                </button>
+                            </div>
                         </>
                     )}
 
@@ -252,38 +322,64 @@ export default function Login() {
                             <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
 
                                 {mode === "signup" && (
-                                    <input
-                                        placeholder="Name"
-                                        {...register("name")}
-                                        className="w-full px-4 py-3 rounded-lg bg-gray-100 border"
-                                    />
+                                    <div>
+                                        <input
+                                            placeholder="Name"
+                                            autoComplete="name"
+                                            aria-invalid={!!errors.name}
+                                            {...register("name")}
+                                            className={`w-full px-4 py-3 rounded-lg bg-gray-100 border ${errors.name ? "border-red-500" : ""
+                                                }`}
+                                        />
+                                        {errors.name && (
+                                            <p className="text-sm text-red-600 mt-1">{errors.name.message}</p>
+                                        )}
+                                    </div>
                                 )}
 
-                                <input
-                                    placeholder="Email"
-                                    {...register("email")}
-                                    className="w-full px-4 py-3 rounded-lg bg-gray-100 border"
-                                />
-
-                                <div className="relative">
+                                <div>
                                     <input
-                                        type={showPass ? "text" : "password"}
-                                        placeholder="Password"
-                                        {...register("password")}
-                                        className="w-full px-4 py-3 rounded-lg bg-gray-100 border"
+                                        placeholder="Email"
+                                        type="email"
+                                        autoComplete="email"
+                                        aria-invalid={!!errors.email}
+                                        {...register("email")}
+                                        className={`w-full px-4 py-3 rounded-lg bg-gray-100 border ${errors.email ? "border-red-500" : ""
+                                            }`}
                                     />
-                                    <button
-                                        type="button"
-                                        className="absolute right-4 top-3"
-                                        onClick={() => setShowPass(!showPass)}
-                                    >
-                                        {showPass ? <EyeOff /> : <Eye />}
-                                    </button>
+                                    {errors.email && (
+                                        <p className="text-sm text-red-600 mt-1">{errors.email.message}</p>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <div className="relative">
+                                        <input
+                                            type={showPass ? "text" : "password"}
+                                            placeholder="Password"
+                                            autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                                            aria-invalid={!!errors.password}
+                                            {...register("password")}
+                                            className={`w-full px-4 py-3 rounded-lg bg-gray-100 border ${errors.password ? "border-red-500" : ""
+                                                }`}
+                                        />
+                                        <button
+                                            type="button"
+                                            aria-label={showPass ? "Hide password" : "Show password"}
+                                            className="absolute right-4 top-3 text-gray-500"
+                                            onClick={() => setShowPass(!showPass)}
+                                        >
+                                            {showPass ? <EyeOff size={20} /> : <Eye size={20} />}
+                                        </button>
+                                    </div>
+                                    {errors.password && (
+                                        <p className="text-sm text-red-600 mt-1">{errors.password.message}</p>
+                                    )}
                                 </div>
 
                                 <button
                                     disabled={loading}
-                                    className="w-full py-3 rounded-lg bg-[#1e3a8a] text-white font-semibold"
+                                    className="w-full py-3 rounded-lg bg-[#1e3a8a] text-white font-semibold disabled:opacity-60"
                                 >
                                     {loading ? "Please wait..." : mode === "signin" ? "Sign In" : "Register"}
                                 </button>

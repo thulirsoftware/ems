@@ -60,11 +60,10 @@ const AssessmentService = {
   },
 
   // 🔹 SUBMIT EXAM
-  SubmitAssessment: async (id, payload) => {
-    const res = await http.post(
-      `/user/assessments/${id}/submit`,
-      payload
-    );
+  // The backend scores from AssessmentAnswer rows already saved via
+  // SaveAnswer above — submit takes no request body.
+  SubmitAssessment: async (id) => {
+    const res = await http.post(`/user/assessments/${id}/submit`);
     return res.data;
   },
   GetAssessmentResult: async (

@@ -1,12 +1,15 @@
 import { CalendarDays } from "lucide-react";
 
-export default function UpcomingExams() {
+function formatDate(dateStr) {
+  if (!dateStr) return "Unscheduled";
 
-  const exams = [
-    { name: "React Assessment", date: "20 Feb" },
-    { name: "JavaScript Test", date: "25 Feb" },
-    { name: "DBMS Quiz", date: "28 Feb" },
-  ];
+  return new Date(dateStr).toLocaleDateString(undefined, {
+    day: "2-digit",
+    month: "short",
+  });
+}
+
+export default function UpcomingExams({ exams = [], loading }) {
 
   return (
     <div className="bg-white rounded-2xl shadow-sm p-6">
@@ -15,26 +18,32 @@ export default function UpcomingExams() {
         Upcoming Exams
       </h3>
 
-      {exams.map((exam, i) => (
-        <div
-          key={i}
-          className="flex items-center justify-between py-3 border-b last:border-none"
-        >
-          <div className="flex items-center gap-3">
-            <div className="bg-red-100 p-2 rounded-lg">
-              <CalendarDays size={18} className="text-red-500"/>
+      {loading ? (
+        <p className="text-gray-400 text-sm py-4">Loading...</p>
+      ) : exams.length === 0 ? (
+        <p className="text-gray-400 text-sm py-4">No upcoming exams</p>
+      ) : (
+        exams.map((exam, i) => (
+          <div
+            key={exam.assessment_id ?? i}
+            className="flex items-center justify-between py-3 border-b last:border-none"
+          >
+            <div className="flex items-center gap-3">
+              <div className="bg-red-100 p-2 rounded-lg">
+                <CalendarDays size={18} className="text-red-500"/>
+              </div>
+
+              <span className="font-medium">
+                {exam.assessment_title}
+              </span>
             </div>
 
-            <span className="font-medium">
-              {exam.name}
+            <span className="text-gray-500 text-sm">
+              {formatDate(exam.publish_date)}
             </span>
           </div>
-
-          <span className="text-gray-500 text-sm">
-            {exam.date}
-          </span>
-        </div>
-      ))}
+        ))
+      )}
 
     </div>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import AssessmentService from "../../../services/assesment.service";
 
 export default function RunningAssessmentDetails() {
@@ -8,6 +9,7 @@ export default function RunningAssessmentDetails() {
 
   const [exam, setExam] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [starting, setStarting] = useState(false);
 
   useEffect(() => {
     if (examid) loadData();
@@ -41,10 +43,11 @@ export default function RunningAssessmentDetails() {
 
   // ✅ START EXAM
   const startExam = async () => {
+    if (starting) return;
+    setStarting(true);
+
     try {
       const res = await AssessmentService.StartAssessment(examid);
-
-      console.log("Start Exam Response:", res);
 
       const attemptId =
         res?.attempt?.id || res?.data?.attempt?.id;
@@ -56,17 +59,14 @@ export default function RunningAssessmentDetails() {
       // optional resume support
       localStorage.setItem("running_attempt", attemptId);
 
-      navigate(
-        `/assesments/start/${examid}/run/${attemptId}`, {
-        state: {
-          start_time: exam.start_time,
-          end_time: exam.end_time,
-          publish_date: exam.publish_date
-        }
-      }
-      );
+      // The questions screen re-fetches assessment details itself (it needs
+      // to survive a page refresh, which route state does not), so no state
+      // needs to be passed here.
+      navigate(`/assesments/start/${examid}/run/${attemptId}`);
     } catch (err) {
       console.error("Failed to start assessment", err);
+      toast.error(err.response?.data?.message || "Failed to start the assessment. Please try again.");
+      setStarting(false);
     }
   };
 
@@ -85,21 +85,16 @@ export default function RunningAssessmentDetails() {
         <p className="text-gray-600 mt-1">{exam.description}</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-gray-50 border rounded-xl p-4 text-center text-sm">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 border rounded-xl p-4 text-center text-sm">
         <div>
           <p className="text-gray-500">Duration</p>
           <p className="font-semibold">{getDuration()}</p>
         </div>
 
         <div>
-          <p className="text-gray-500">Total Marks</p>
-          <p className="font-semibold">{exam.total_marks}</p>
-        </div>
-
-        <div>
           <p className="text-gray-500">Negative</p>
           <p className="font-semibold">
-            {exam.has_negative ? "-1 / wrong" : "No"}
+            {exam.has_negative ? `-${exam.negative_marks} / wrong` : "No"}
           </p>
         </div>
 
@@ -118,10 +113,11 @@ export default function RunningAssessmentDetails() {
 
       <button
         onClick={startExam}
+        disabled={starting}
         className="w-full py-3 rounded-xl font-semibold text-white
-        bg-red-600 hover:bg-red-700 transition"
+        bg-red-600 hover:bg-red-700 transition disabled:opacity-60"
       >
-        Start Exam Now
+        {starting ? "Starting..." : "Start Exam Now"}
       </button>
     </section>
   );

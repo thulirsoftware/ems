@@ -1,25 +1,20 @@
 import {
     ChevronLeft, ChevronRight,
-    Moon,
-    Sun,
     ChevronDown,
-    User,
     LogOut,
-    Settings,
 } from "lucide-react";
 import { useSidebarStore } from "../../../store/sidebarStore";
 import { useAuthStore } from "../../../store/authStore";
-import { useThemeStore } from "../../../store/themeStore";
 import { useNavigate } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
 import NotificationDropdown from "../Notification/NotificationDropdown";
+import authService from "../../../services/auth.service";
 export default function Header() {
     const navigate = useNavigate();
 
     // stores
     const { isOpen, toggleSidebar } = useSidebarStore();
     const { admin, logout } = useAuthStore();
-    const { theme, toggleTheme } = useThemeStore();
 
     const [openProfile, setOpenProfile] = useState(false);
     const profileRef = useRef(null);
@@ -63,18 +58,6 @@ export default function Header() {
 
             {/* RIGHT SIDE */}
             <div className="flex items-center gap-4">
-                
-                {/* THEME TOGGLE */}
-                <button
-                    onClick={toggleTheme}
-                    className="p-2 rounded-lg hover:bg-gray-100 transition"
-                >
-                    {theme === "light" ? (
-                        <Moon size={20} />
-                    ) : (
-                        <Sun size={20} className="text-yellow-500" />
-                    )}
-                </button>
                 <NotificationDropdown />
 
                 {/* PROFILE */}
@@ -107,23 +90,17 @@ export default function Header() {
                 shadow-lg overflow-hidden z-50
               "
                         >
+                            {/* No profile/settings page exists on the backend yet —
+                                removed rather than linking to a 404. */}
                             <button
-                                onClick={() => navigate("/profile")}
-                                className="flex items-center gap-2 w-full px-4 py-3 hover:bg-gray-100"
-                            >
-                                <User size={16} />
-                                Profile
-                            </button>
-                            <button
-                                onClick={() => navigate("/profile")}
-                                className="flex items-center gap-2 w-full px-4 py-3 hover:bg-gray-100"
-                            >
-                                <Settings size={16} />
-                                Settings
-                            </button>
-
-                            <button
-                                onClick={() => {
+                                onClick={async () => {
+                                    try {
+                                        // Revoke the token server-side too — best effort,
+                                        // the local session clears either way.
+                                        await authService.logout();
+                                    } catch {
+                                        // ignore — token may already be invalid/expired
+                                    }
                                     logout();
                                     navigate("/login");
                                 }}
