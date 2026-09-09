@@ -14,7 +14,7 @@ class UserNotificationController extends Controller
         $user = $request->user('users');
 
         $notifications = Notification::where('user_id', $user->id)
-            ->where('is_read', 'false')
+            ->where('is_read', false)
             ->latest()
             ->get();
 

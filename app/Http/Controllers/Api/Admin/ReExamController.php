@@ -9,6 +9,7 @@ use App\Models\Batch;
 use App\Models\Assessment;
 use App\Models\AssessmentAssignment;
 use App\Services\NotificationService;
+use Illuminate\Support\Facades\DB;
 
 class ReExamController extends Controller
 {
@@ -22,39 +23,50 @@ class ReExamController extends Controller
             ($sourceBatch->publish_date == $today && $sourceBatch->end_time > $nowTime);
     }
 
-    // Create the re-exam batch, assign every user to it and notify them
+    // Create the re-exam batch, assign every user to it and notify them.
+    // Wrapped in a transaction so a failure partway through (e.g. one bad
+    // notification write) can't leave a batch with only some users assigned.
     private function createReExamBatch($assessment, $validated, $namePrefix, $capacity, $userIds)
     {
-        $batch = Batch::create([
-            'assessment_id' => $assessment->id,
-            'name' => $namePrefix . $assessment->id . '_' . time(),
-            'publish_date' => $validated['publish_date'],
-            'start_time' => $validated['start_time'],
-            'end_time' => $validated['end_time'],
-            'capacity' => $capacity,
-        ]);
+        // Callers may pass duplicate ids (e.g. a manually submitted user_ids
+        // array); since assignments now carry a unique (assessment, user,
+        // batch) constraint, de-duplicating here — once — keeps every caller
+        // safe instead of relying on each one to remember to do it.
+        $userIds = array_values(array_unique($userIds));
 
-        foreach ($userIds as $userId) {
+        return DB::transaction(function () use ($assessment, $validated, $namePrefix, $capacity, $userIds) {
 
-            AssessmentAssignment::create([
+            $batch = Batch::create([
                 'assessment_id' => $assessment->id,
-                'user_id' => $userId,
-                'batch_id' => $batch->id,
+                'name' => $namePrefix . $assessment->id . '_' . time(),
+                'publish_date' => $validated['publish_date'],
+                'start_time' => $validated['start_time'],
+                'end_time' => $validated['end_time'],
+                'capacity' => $capacity,
             ]);
 
-            NotificationService::notifyUser(
-                $userId,
-                're_exam_assigned',
-                'Re-exam scheduled',
-                "You have a re-exam for {$assessment->title}",
-                [
-                    'assessment_id' => $assessment->id,
-                    'batch_id' => $batch->id
-                ]
-            );
-        }
+            foreach ($userIds as $userId) {
 
-        return $batch;
+                AssessmentAssignment::create([
+                    'assessment_id' => $assessment->id,
+                    'user_id' => $userId,
+                    'batch_id' => $batch->id,
+                ]);
+
+                NotificationService::notifyUser(
+                    $userId,
+                    're_exam_assigned',
+                    'Re-exam scheduled',
+                    "You have a re-exam for {$assessment->title}",
+                    [
+                        'assessment_id' => $assessment->id,
+                        'batch_id' => $batch->id
+                    ]
+                );
+            }
+
+            return $batch;
+        });
     }
 
     public function createReExam(Request $request)
@@ -95,7 +107,9 @@ class ReExamController extends Controller
                     ], 422);
                 }
 
-                $sourceBatch = Batch::find($validated['source_batch_id']);
+                $sourceBatch = Batch::where('id', $validated['source_batch_id'])
+                    ->where('assessment_id', $assessment->id)
+                    ->firstOrFail();
 
                 $userIds = AssessmentAssignment::where('batch_id', $sourceBatch->id)
                     ->pluck('user_id')
@@ -130,7 +144,9 @@ class ReExamController extends Controller
 
             // For manual mode, source batch is optional
             if (!empty($validated['source_batch_id'])) {
-                $sourceBatch = Batch::find($validated['source_batch_id']);
+                $sourceBatch = Batch::where('id', $validated['source_batch_id'])
+                    ->where('assessment_id', $assessment->id)
+                    ->firstOrFail();
             }
         }
 
@@ -207,7 +223,9 @@ class ReExamController extends Controller
                 ], 422);
             }
 
-            $sourceBatch = Batch::findOrFail($validated['source_batch_id']);
+            $sourceBatch = Batch::where('id', $validated['source_batch_id'])
+                ->where('assessment_id', $assessment->id)
+                ->firstOrFail();
 
         } else {
 
@@ -249,16 +267,13 @@ class ReExamController extends Controller
                 continue; // avoid double processing
             }
 
-            // FAILED
+            // FAILED — use the same score parsing as reports/dashboards so a
+            // still-pending-evaluation attempt isn't silently treated as 0%.
             if (in_array($validated['filter'], ['failed', 'both'])) {
 
-                $scoreParts = explode('/', $attempt->score);
-                $scoreValue = (int) ($scoreParts[0] ?? 0);
-                $total = (int) ($scoreParts[1] ?? 1);
+                $result = parse_score($attempt->score);
 
-                $percentage = ($total > 0) ? ($scoreValue / $total) * 100 : 0;
-
-                if ($percentage < $passingPercentage) {
+                if ($result && $result['percentage'] < $passingPercentage) {
                     $userIds[] = $userId;
                 }
             }

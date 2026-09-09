@@ -15,13 +15,14 @@ use App\Http\Controllers\Api\Admin\ReExamController;
 
 // Admin auth
 Route::prefix('admin')->group(function () {
-    Route::post('register', [AdminAuthController::class, 'register']);
-    Route::post('login', [AdminAuthController::class, 'login']);
+    Route::post('login', [AdminAuthController::class, 'login'])->middleware('throttle:login');
 
-    // Admin profile
+    // Admin profile & management — registering a new admin requires an
+    // authenticated admin, so anonymous callers can never create one.
     Route::middleware('admin')->group(function () {
         Route::get('me', fn() => auth('admins')->user());
         Route::post('logout', [AdminAuthController::class, 'logout']);
+        Route::post('register', [AdminAuthController::class, 'register']);
     });
 });
 

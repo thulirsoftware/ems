@@ -10,8 +10,8 @@ return new class extends Migration
     {
         Schema::create('assessment_types', function (Blueprint $table) {
             $table->id();
-            $table->string('name');           // e.g. MCQ, Coding
-            $table->string('slug')->unique(); // e.g. mcq, coding
+            $table->string('name');           // e.g. MCQ, Descriptive
+            $table->string('slug')->unique(); // e.g. mcq, descriptive
             $table->text('description')->nullable();
             $table->boolean('is_active')->default(true);
             $table->softDeletes();

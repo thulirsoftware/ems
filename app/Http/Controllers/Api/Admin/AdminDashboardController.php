@@ -12,39 +12,6 @@ use Illuminate\Http\Request;
 
 class AdminDashboardController extends Controller
 {
-    // Helper to classify a batch as upcoming / running / finished
-    private function batchStatus($assessment, $batch, $today, $nowTime)
-    {
-        if ($assessment->is_flexible) {
-
-            return !$batch->expiry_date || $batch->expiry_date >= $today
-                ? 'running'
-                : 'finished';
-        }
-
-        if (!$batch->publish_date) {
-            return 'upcoming';
-        }
-
-        if ($batch->publish_date > $today) {
-            return 'upcoming';
-        }
-
-        if ($batch->publish_date < $today) {
-            return 'finished';
-        }
-
-        if ($batch->start_time > $nowTime) {
-            return 'upcoming';
-        }
-
-        if ($batch->end_time < $nowTime) {
-            return 'finished';
-        }
-
-        return 'running';
-    }
-
     // Assessment counters, including a breakdown per assessment type
     private function assessmentStats($assessments)
     {
@@ -80,7 +47,7 @@ class AdminDashboardController extends Controller
                 continue;
             }
 
-            $counts[$this->batchStatus($assessment, $batch, $today, $nowTime)]++;
+            $counts[batch_status($assessment, $batch, $today, $nowTime)]++;
         }
 
         return $counts;
@@ -145,7 +112,7 @@ class AdminDashboardController extends Controller
                     return null;
                 }
 
-                if ($this->batchStatus($assessment, $batch, $today, $nowTime) !== 'upcoming') {
+                if (batch_status($assessment, $batch, $today, $nowTime) !== 'upcoming') {
                     return null;
                 }
 

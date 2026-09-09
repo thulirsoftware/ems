@@ -49,7 +49,7 @@ class AdminBatchController extends Controller
             'name' => 'required|string|max:255',
             'publish_date' => 'required|date',
             'start_time' => 'required|date_format:H:i:s',
-            'end_time' => 'required|date_format:H:i:s',
+            'end_time' => 'required|date_format:H:i:s|after:start_time',
             'assessment_id' => 'required|exists:assessments,id',
             'capacity' => 'required|integer|min:1',
         ]);
@@ -124,6 +124,10 @@ class AdminBatchController extends Controller
         $end = $validated['end_time'] ?? $batch->end_time;
         $date = $validated['publish_date'] ?? $batch->publish_date;
 
+        if ($start && $end && $end <= $start) {
+            return response()->json(['message' => 'end_time must be after start_time'], 422);
+        }
+
         $conflict = Batch::where('assessment_id', $batch->assessment_id)
             ->whereDate('publish_date', $date)
             ->where('id', '!=', $batch->id)
@@ -180,6 +184,17 @@ class AdminBatchController extends Controller
             ], 403);
         }
 
+        $assessment = Assessment::find($batch->assessment_id);
+
+        // A non-batch-wise assessment always has exactly one implicit batch;
+        // every other endpoint (starting an attempt, admin results, re-exams)
+        // assumes it exists. Deleting it would leave the assessment unusable.
+        if ($assessment && !$assessment->is_batch_wise) {
+            return response()->json([
+                'message' => 'Cannot delete the only batch of a non-batch-wise assessment'
+            ], 422);
+        }
+
         $batch->delete();
 
         return response()->json(['message' => 'Batch deleted']);
@@ -187,9 +202,17 @@ class AdminBatchController extends Controller
 
     public function getUsersByBatchId(Request $request, $id)
     {
+        $admin = $request->user('admins');
+
+        $batch = Batch::where('id', $id)
+            ->whereHas('assessment', function ($q) use ($admin) {
+                $q->where('admin_id', $admin->id);
+            })
+            ->firstOrFail();
+
         $users = User::whereIn(
             'id',
-            AssessmentAssignment::where('batch_id', $id)
+            AssessmentAssignment::where('batch_id', $batch->id)
                 ->pluck('user_id')
         )->get();
 

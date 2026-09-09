@@ -32,11 +32,15 @@ class AdminResultController extends Controller
             ->where('is_active', true)
             ->get();
 
+        $batchesByAssessment = Batch::whereIn('assessment_id', $assessments->pluck('id'))
+            ->get()
+            ->groupBy('assessment_id');
+
         $result = [];
 
         foreach ($assessments as $assessment) {
 
-            $batches = Batch::where('assessment_id', $assessment->id)->get();
+            $batches = $batchesByAssessment->get($assessment->id, collect());
 
             foreach ($batches as $batch) {
 
@@ -234,6 +238,10 @@ class AdminResultController extends Controller
             ], 400);
         }
 
+        // Ensure the question actually belongs to this assessment, otherwise
+        // the graded-count-vs-total-questions check below can be thrown off.
+        $assessment->questions()->where('id', $question_id)->firstOrFail();
+
         $answer = $attempt->answers()->firstOrCreate(
             ['question_id' => $question_id],
             ['answer' => null]
@@ -355,8 +363,10 @@ class AdminResultController extends Controller
 
         $totalQuestions = $questions->count();
 
-        $scoreParts = explode('/', $attempt->score);
-        $scoreValue = (int) ($scoreParts[0] ?? 0);
+        // Same score parsing as reports/dashboards (handles the fractional
+        // scores that negative marking can produce).
+        $parsed = parse_score($attempt->score);
+        $scoreValue = $parsed['score'] ?? 0;
 
         $percentage = $totalQuestions > 0
             ? round(($scoreValue / $totalQuestions) * 100)
@@ -373,6 +383,63 @@ class AdminResultController extends Controller
             'wrong' => $wrong,
             'unanswered' => $unanswered,
             'questions' => $questionData,
+        ]);
+    }
+
+    // 6. Rank list: evaluated attempts for an assessment, ranked by score
+    // (batch-aware). This route existed with no backing method — every call
+    // threw an uncaught "call to undefined method" error.
+    public function rankList(Request $request, $assessment_id)
+    {
+        $admin = $request->user('admins');
+
+        $assessment = $this->getAdminAssessment($admin->id, $assessment_id);
+
+        $result = resolve_batch($assessment, $request->query('batch_id'));
+
+        if (isset($result['error'])) {
+            return $result['error'];
+        }
+
+        $batch = $result['batch'];
+        $batchId = $batch?->id;
+
+        $attempts = AssessmentAttempt::where('assessment_id', $assessment_id)
+            ->where('batch_id', $batchId)
+            ->whereNotNull('submitted_at')
+            ->with('user:id,name')
+            ->get();
+
+        $rankList = $attempts
+            ->map(function ($attempt) {
+
+                $parsed = parse_score($attempt->score);
+
+                if (!$parsed) {
+                    return null;
+                }
+
+                return [
+                    'user_id' => $attempt->user_id,
+                    'name' => $attempt->user?->name,
+                    'score' => $parsed['score'],
+                    'total_marks' => $parsed['total'],
+                    'percentage' => $parsed['percentage'],
+                ];
+            })
+            ->filter()
+            ->sortByDesc('percentage')
+            ->values()
+            ->map(function ($row, $index) {
+                $row['rank'] = $index + 1;
+
+                return $row;
+            });
+
+        return response()->json([
+            'assessment_id' => (int) $assessment_id,
+            'batch_id' => $batchId,
+            'rank_list' => $rankList,
         ]);
     }
 }

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Maatwebsite\Excel\Facades\Excel;
 
 class AdminUserController extends Controller
@@ -20,7 +21,7 @@ class AdminUserController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
-            'password' => 'required|string|min:6',
+            'password' => 'required|string|min:8',
         ]);
 
         $user = new User();
@@ -50,6 +51,7 @@ class AdminUserController extends Controller
         $header = array_map('strtolower', $rows[0]); // normalize header
 
         $users = [];
+        $generatedPasswords = [];
         $errors = [];
 
         foreach (array_slice($rows, 1) as $index => $row) {
@@ -66,16 +68,27 @@ class AdminUserController extends Controller
                     continue;
                 }
 
+                // A shared, guessable fallback password (e.g. "123456") would
+                // leave every such account equally vulnerable. Generate a
+                // unique temporary password per user instead and report it
+                // back so the admin can distribute it.
+                $rawPassword = $data['password'] ?? null;
+
+                if (empty($rawPassword)) {
+                    $rawPassword = Str::password(12);
+                    $generatedPasswords[] = ['email' => $data['email'], 'temporary_password' => $rawPassword];
+                }
+
                 $users[] = [
                     'name' => $data['name'] ?? '',
                     'email' => $data['email'],
-                    'password' => Hash::make($data['password'] ?? '123456'),
+                    'password' => Hash::make($rawPassword),
                     'email_verified_at' => app_now(),
                     'created_at' => app_now(),
                     'updated_at' => app_now(),
                 ];
 
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
                 $errors[] = ['row' => $index + 2, 'error' => $e->getMessage()];
             }
         }
@@ -87,6 +100,7 @@ class AdminUserController extends Controller
         return response()->json([
             'message' => 'Bulk upload completed',
             'inserted' => count($users),
+            'generated_passwords' => $generatedPasswords,
             'errors' => $errors
         ]);
     }

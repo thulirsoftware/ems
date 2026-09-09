@@ -54,7 +54,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     : 500;
 
                 return response()->json([
-                    'message' => $status === 500 ? $e->getMessage().'Server error' : $e->getMessage()
+                    'message' => $status === 500 ? 'Server error' : $e->getMessage()
                 ], $status);
             }
         });

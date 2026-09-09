@@ -53,6 +53,40 @@ if (!function_exists('attempt_status')) {
     }
 }
 
+if (!function_exists('batch_status')) {
+    // A batch's own scheduling status, independent of any one user's attempt.
+    // Single source of truth shared by the admin dashboard and report
+    // controllers, which previously kept two private copies that quietly
+    // disagreed about what an unscheduled (no publish_date) batch should be
+    // called.
+    function batch_status($assessment, $batch, $today, $nowTime)
+    {
+        if ($assessment->is_flexible) {
+            return !$batch->expiry_date || $batch->expiry_date >= $today
+                ? 'running'
+                : 'finished';
+        }
+
+        if (!$batch->publish_date || $batch->publish_date > $today) {
+            return $batch->publish_date ? 'upcoming' : 'unscheduled';
+        }
+
+        if ($batch->publish_date < $today) {
+            return 'finished';
+        }
+
+        if ($batch->start_time > $nowTime) {
+            return 'upcoming';
+        }
+
+        if ($batch->end_time < $nowTime) {
+            return 'finished';
+        }
+
+        return 'running';
+    }
+}
+
 if (!function_exists('bucket_percentages')) {
     // percentage buckets for a results chart
     function bucket_percentages($percentages)

@@ -110,34 +110,6 @@ class AdminReportController extends Controller
         return $query->get();
     }
 
-    private function batchStatus($assessment, $batch, $today, $nowTime)
-    {
-        if ($assessment->is_flexible) {
-
-            return !$batch->expiry_date || $batch->expiry_date >= $today
-                ? 'running'
-                : 'finished';
-        }
-
-        if (!$batch->publish_date || $batch->publish_date > $today) {
-            return $batch->publish_date ? 'upcoming' : 'unscheduled';
-        }
-
-        if ($batch->publish_date < $today) {
-            return 'finished';
-        }
-
-        if ($batch->start_time > $nowTime) {
-            return 'upcoming';
-        }
-
-        if ($batch->end_time < $nowTime) {
-            return 'finished';
-        }
-
-        return 'running';
-    }
-
     // 1. Headline report across everything matching the filters
     public function summary(Request $request)
     {
@@ -285,7 +257,7 @@ class AdminReportController extends Controller
                 'assessment_id' => $batch->assessment_id,
                 'assessment_title' => $assessment?->title,
                 'status' => $assessment
-                    ? $this->batchStatus($assessment, $batch, $today, $nowTime)
+                    ? batch_status($assessment, $batch, $today, $nowTime)
                     : null,
 
                 'publish_date' => $batch->publish_date,

@@ -52,7 +52,7 @@ class AssessmentQuestionController extends Controller
             'type' => 'required|in:mcq,descriptive',
             'question_text' => 'required|string',
             'order' => 'required|integer',
-            'config' => 'required_if:type,case_based|array',
+            'config' => 'nullable|array',
         ]);
 
         $question = AssessmentQuestion::create([
@@ -327,14 +327,14 @@ class AssessmentQuestionController extends Controller
 
                     $inserted++;
 
-                } catch (\Exception $e) {
+                } catch (\Throwable $e) {
                     $errors[] = ['row' => $index + 2, 'error' => $e->getMessage()];
                 }
             }
 
             DB::commit();
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
             return response()->json(['message' => 'Bulk insert failed'], 500);
         }

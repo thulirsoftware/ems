@@ -51,7 +51,7 @@ class AssessmentAttemptController extends Controller
         } else {
 
             $isAvailable =
-                $batch->publish_date === $today &&
+                $batch->publish_date == $today &&
                 $nowTime >= $batch->start_time &&
                 $nowTime <= $batch->end_time;
         }
@@ -124,8 +124,6 @@ class AssessmentAttemptController extends Controller
                 break;
 
             case 'descriptive':
-            case 'coding':
-            case 'case_based':
                 $result = $this->submitManualAssessment($attempt);
                 break;
 
@@ -239,8 +237,8 @@ class AssessmentAttemptController extends Controller
         $ordered = $attempt->question_order ?? [];
         $totalQuestions = count($ordered);
 
-        $page = $request->get('page', 1);
-        $pageSize = $request->get('page_size', 10);
+        $page = max(1, (int) $request->get('page', 1));
+        $pageSize = min(100, max(1, (int) $request->get('page_size', 10)));
         $offset = ($page - 1) * $pageSize;
 
         $paginatedIds = array_slice($ordered, $offset, $pageSize);
@@ -285,7 +283,11 @@ class AssessmentAttemptController extends Controller
             ];
         });
 
-        $scoreValue = (int) explode('/', $attempt->score)[0];
+        // Use the same score parsing as reports/dashboards (handles the
+        // fractional scores that negative marking can produce) instead of
+        // truncating to an int locally.
+        $parsed = parse_score($attempt->score);
+        $scoreValue = $parsed['score'] ?? 0;
         $percentage = $totalQuestions > 0
             ? round(($scoreValue / $totalQuestions) * 100)
             : 0;

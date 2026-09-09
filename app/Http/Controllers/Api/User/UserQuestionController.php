@@ -48,17 +48,10 @@ class UserQuestionController extends Controller
 
             if ($batch->duration_minutes) {
 
-                $startedAt = app_now()
-                    ->copy()
-                    ->setTimeFromTimeString(
-                        $attempt->started_at
-                    );
-
-                if ($startedAt->gt(app_now())) {
-                    $startedAt->subDay();
-                }
-
-                $expiresAt = $startedAt
+                // started_at only stores a time-of-day, not the date, so the
+                // attempt's created_at (a full timestamp) is the reliable
+                // source of when the attempt actually began.
+                $expiresAt = $attempt->created_at
                     ->copy()
                     ->addMinutes(
                         $batch->duration_minutes

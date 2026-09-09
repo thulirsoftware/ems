@@ -11,10 +11,13 @@ use App\Http\Controllers\Api\User\UserAnswerController;
 
 // User auth
 Route::prefix('user')->group(function () {
-    Route::post('register', [UserAuthController::class, 'register']);
-    Route::post('login', [UserAuthController::class, 'login']);
-    Route::post('send-verification-code', [UserAuthController::class, 'sendVerificationCode']);
-    Route::post('verify-email', [UserAuthController::class, 'verifyEmail']);
+    // A shared classroom/office IP can register many students in quick
+    // succession, so this stays generous — it only needs to stop automated
+    // mass account creation, not a normal lab full of students.
+    Route::post('register', [UserAuthController::class, 'register'])->middleware('throttle:30,1');
+    Route::post('login', [UserAuthController::class, 'login'])->middleware('throttle:login');
+    Route::post('send-verification-code', [UserAuthController::class, 'sendVerificationCode'])->middleware('throttle:otp');
+    Route::post('verify-email', [UserAuthController::class, 'verifyEmail'])->middleware('throttle:otp');
 
     // User profile
     Route::middleware('user')->group(function () {

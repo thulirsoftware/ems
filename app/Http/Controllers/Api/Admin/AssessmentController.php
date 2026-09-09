@@ -23,11 +23,15 @@ class AssessmentController extends Controller
             ->latest()
             ->get();
 
+        $batchesByAssessment = Batch::whereIn('assessment_id', $assessments->pluck('id'))
+            ->get()
+            ->groupBy('assessment_id');
+
         $result = [];
 
         foreach ($assessments as $assessment) {
 
-            $batches = Batch::where('assessment_id', $assessment->id)->get();
+            $batches = $batchesByAssessment->get($assessment->id, collect());
 
             foreach ($batches as $batch) {
                 $result[] = [
@@ -91,6 +95,12 @@ class AssessmentController extends Controller
             ) {
                 return response()->json([
                     'message' => 'Publish date, start time and end time are required'
+                ], 422);
+            }
+
+            if ($validated['end_time'] <= $validated['start_time']) {
+                return response()->json([
+                    'message' => 'end_time must be after start_time'
                 ], 422);
             }
         }
@@ -248,6 +258,22 @@ class AssessmentController extends Controller
             ], 422);
         }
 
+        $batch = $assessment->is_batch_wise
+            ? null
+            : Batch::where('assessment_id', $assessment->id)->first();
+
+        if ($batch) {
+
+            $effectiveStart = $validated['start_time'] ?? $batch->start_time;
+            $effectiveEnd = $validated['end_time'] ?? $batch->end_time;
+
+            if ($effectiveStart && $effectiveEnd && $effectiveEnd <= $effectiveStart) {
+                return response()->json([
+                    'message' => 'end_time must be after start_time'
+                ], 422);
+            }
+        }
+
         $assessment->update(
             collect($validated)->except([
                 'publish_date',
@@ -258,24 +284,16 @@ class AssessmentController extends Controller
             ])->toArray()
         );
 
-        if (!$assessment->is_batch_wise) {
+        if ($batch) {
 
-            $batch = Batch::where(
-                'assessment_id',
-                $assessment->id
-            )->first();
+            $batch->update([
+                'publish_date' => $validated['publish_date'] ?? $batch->publish_date,
+                'start_time' => $validated['start_time'] ?? $batch->start_time,
+                'end_time' => $validated['end_time'] ?? $batch->end_time,
 
-            if ($batch) {
-
-                $batch->update([
-                    'publish_date' => $validated['publish_date'] ?? $batch->publish_date,
-                    'start_time' => $validated['start_time'] ?? $batch->start_time,
-                    'end_time' => $validated['end_time'] ?? $batch->end_time,
-
-                    'expiry_date' => $validated['expiry_date'] ?? $batch->expiry_date,
-                    'duration_minutes' => $validated['duration_minutes'] ?? $batch->duration_minutes,
-                ]);
-            }
+                'expiry_date' => $validated['expiry_date'] ?? $batch->expiry_date,
+                'duration_minutes' => $validated['duration_minutes'] ?? $batch->duration_minutes,
+            ]);
         }
 
         return response()->json([
@@ -314,11 +332,15 @@ class AssessmentController extends Controller
             ->latest()
             ->get();
 
+        $batchesByAssessment = Batch::whereIn('assessment_id', $assessments->pluck('id'))
+            ->get()
+            ->groupBy('assessment_id');
+
         $result = [];
 
         foreach ($assessments as $assessment) {
 
-            $batches = Batch::where('assessment_id', $assessment->id)->get();
+            $batches = $batchesByAssessment->get($assessment->id, collect());
 
             foreach ($batches as $batch) {
                 $result[] = [
@@ -347,6 +369,10 @@ class AssessmentController extends Controller
             ->where('is_active', true)
             ->get();
 
+        $batchesByAssessment = Batch::whereIn('assessment_id', $assessments->pluck('id'))
+            ->get()
+            ->groupBy('assessment_id');
+
         $result = [];
 
         foreach ($assessments as $assessment) {
@@ -355,7 +381,7 @@ class AssessmentController extends Controller
                 continue;
             }
 
-            $batches = Batch::where('assessment_id', $assessment->id)->get();
+            $batches = $batchesByAssessment->get($assessment->id, collect());
 
             foreach ($batches as $batch) {
 
@@ -388,11 +414,15 @@ class AssessmentController extends Controller
             ->where('is_active', true)
             ->get();
 
+        $batchesByAssessment = Batch::whereIn('assessment_id', $assessments->pluck('id'))
+            ->get()
+            ->groupBy('assessment_id');
+
         $result = [];
 
         foreach ($assessments as $assessment) {
 
-            $batches = Batch::where('assessment_id', $assessment->id)->get();
+            $batches = $batchesByAssessment->get($assessment->id, collect());
 
             foreach ($batches as $batch) {
 

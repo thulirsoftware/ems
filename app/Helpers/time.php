@@ -43,6 +43,14 @@ if (!function_exists('resolve_batch')) {
             ->latest('id')
             ->first();
 
+        if (!$batch) {
+            return [
+                'error' => response()->json([
+                    'message' => 'No batch exists for this assessment'
+                ], 422)
+            ];
+        }
+
         return ['batch' => $batch];
     }
 }

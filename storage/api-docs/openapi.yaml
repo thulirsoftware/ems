@@ -74,9 +74,9 @@ components:
       required: false
       description: >-
         Restrict to assessments whose type slug matches exactly (e.g. `mcq`,
-        `descriptive`, `coding`, `case_based` — any slug present in
-        `assessment_types.slug`). Not validated against the table, so an unknown
-        slug simply matches nothing rather than returning an error.
+        `descriptive` — any slug present in `assessment_types.slug`). Not
+        validated against the table, so an unknown slug simply matches nothing
+        rather than returning an error.
       schema:
         type: string
         example: mcq
@@ -88,7 +88,7 @@ components:
       description: >-
         Restrict to attempts in a single lifecycle state: `in_progress` (started,
         not submitted), `pending_evaluation` (submitted, awaiting manual grading
-        for descriptive/coding/case_based questions), or `evaluated` (submitted and
+        for descriptive questions), or `evaluated` (submitted and
         a final score is available).
       schema:
         type: string
@@ -256,9 +256,9 @@ components:
       type: object
       description: >-
         A category of assessment. Grading behavior in `AssessmentAttemptController`
-        branches on `slug`: `mcq` is auto-graded, `descriptive`/`coding`/`case_based`
-        are queued for manual grading. Managed outside the API surface (seeder only
-        — there is no create/update/delete endpoint for this resource).
+        branches on `slug`: `mcq` is auto-graded, `descriptive` is queued for
+        manual grading. Managed outside the API surface (seeder only — there is
+        no create/update/delete endpoint for this resource).
       properties:
         id:
           type: integer
@@ -469,10 +469,8 @@ components:
           type: string
           enum: [mcq, descriptive]
           description: >-
-            Only `mcq` and `descriptive` can be created through the plain question
-            endpoints. Answer submission (`/user/.../answer`) also supports
-            `coding` and `case_based`, but questions of those types are not
-            currently creatable via this API.
+            The only two supported question/assessment types. Both are creatable
+            through the plain question endpoints.
         question_text:
           type: string
         config:
@@ -620,8 +618,7 @@ components:
           additionalProperties: true
           description: >-
             Shape depends on the assessment type: `{"choice_id": <int>}` for mcq,
-            `{"text": "<string>"}` for descriptive and case_based,
-            `{"code": "<string>"}` for coding.
+            `{"text": "<string>"}` for descriptive.
         is_correct:
           type: boolean
           nullable: true
@@ -1103,10 +1100,12 @@ paths:
       summary: Register a new admin account
       description: >-
         Creates an admin account. No email verification step exists for admins
-        (unlike users) — the account can log in immediately. Public endpoint, no
-        authentication required.
+        (unlike users) — the account can log in immediately. Requires an
+        already-authenticated admin — an anonymous caller cannot create an
+        admin account (this previously was a public, unauthenticated endpoint,
+        which allowed anyone to self-provision full admin access; that was a
+        privilege-escalation vulnerability and has been closed).
       operationId: adminRegister
-      security: []
       requestBody:
         required: true
         content:
@@ -1133,6 +1132,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Admin'
+        '401':
+          description: Unauthenticated — a valid admin bearer token is required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '422':
           description: Validation failed (missing field, invalid email, or email already registered).
           content:
@@ -1274,7 +1279,7 @@ paths:
                 password:
                   type: string
                   format: password
-                  description: Required. Minimum 6 characters. Stored hashed.
+                  description: Required. Minimum 8 characters (matches self-registration). Stored hashed.
       responses:
         '201':
           description: User created successfully.
@@ -1304,10 +1309,13 @@ paths:
         header naming at least `name`, `email` and (optionally) `password`
         columns (case-insensitive). Each data row is processed independently and
         does not stop the batch on failure: rows with a missing/invalid email or
-        an email that already exists are skipped and reported in `errors`; a
-        missing `password` column defaults to `"123456"`. Every created user has
-        `email_verified_at` set immediately, same as the single-create endpoint.
-        Requires admin authentication.
+        an email that already exists are skipped and reported in `errors`. A
+        row with no `password` column gets a unique randomly-generated
+        temporary password (not a shared default) — every generated password
+        is returned in `generated_passwords` so the admin can distribute it;
+        it cannot be recovered afterward since only its hash is stored. Every
+        created user has `email_verified_at` set immediately, same as the
+        single-create endpoint. Requires admin authentication.
       operationId: adminBulkAssignUsers
       requestBody:
         required: true
@@ -1338,6 +1346,17 @@ paths:
                     type: integer
                     description: Number of users successfully created.
                     example: 25
+                  generated_passwords:
+                    type: array
+                    description: One entry per created user whose row had no password column. Shown only once — not recoverable afterward.
+                    items:
+                      type: object
+                      properties:
+                        email:
+                          type: string
+                          format: email
+                        temporary_password:
+                          type: string
                   errors:
                     type: array
                     items:
@@ -1653,10 +1672,12 @@ paths:
       tags: [Admin Batches]
       summary: List users assigned to a batch
       description: >-
-        Returns the users currently assigned to this batch. **Note:** unlike
-        every other batch endpoint, this one does not verify that the batch
-        belongs to an assessment owned by the requesting admin — any
-        authenticated admin can look up any batch ID. Requires admin authentication.
+        Returns the users currently assigned to this batch. Like every other
+        batch endpoint, the batch must belong to an assessment owned by the
+        requesting admin (returns `404` otherwise) — an earlier version of
+        this endpoint skipped that check, allowing any authenticated admin to
+        look up any batch ID; that IDOR has been fixed. Requires admin
+        authentication.
       operationId: adminListBatchUsers
       parameters:
         - name: id
@@ -1676,6 +1697,12 @@ paths:
                   $ref: '#/components/schemas/User'
         '401':
           description: Unauthenticated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: The batch does not exist or its assessment is not owned by the authenticated admin.
           content:
             application/json:
               schema:
@@ -2318,9 +2345,9 @@ paths:
       tags: [Admin Assessment Types]
       summary: List assessment types
       description: >-
-        Returns every assessment type (e.g. mcq, descriptive, coding, case_based),
-        newest first. There is no create/update/delete endpoint — types are
-        managed outside the API (seeder). Requires admin authentication.
+        Returns every assessment type (mcq, descriptive), newest first. There is
+        no create/update/delete endpoint — types are managed outside the API
+        (seeder). Requires admin authentication.
       operationId: adminListAssessmentTypes
       responses:
         '200':
@@ -3707,18 +3734,14 @@ paths:
   /admin/results/{assessment_id}/rank-list:
     get:
       tags: [Admin Assessment Results]
-      summary: Get the rank list for an assessment (route currently broken)
+      summary: Get the rank list for an assessment
       description: >-
-        **This route is registered but not implemented.** It points to
-        `AdminResultController::rankList`, a method that does not exist
-        anywhere in the codebase. Calling it currently throws an uncaught PHP
-        `Error` ("Call to undefined method"), which the global exception
-        handler turns into a generic `500` on the `api/v1/*` mount (and
-        Laravel's default error page/JSON on `web/v1/*` — see the mount caveat
-        above). Documented here only for route-inventory completeness; the
-        request/response shape below is inferred from the URL and sibling
-        results endpoints, not from any working implementation, and should be
-        treated as provisional until the controller method is actually written.
+        Ranks every submitted, evaluated attempt for this assessment/batch by
+        percentage score, highest first (rank `1` = highest). Attempts that
+        are unsubmitted or still pending evaluation are excluded rather than
+        ranked at 0%. Uses the same batch resolution as the other results
+        endpoints: pass `batch_id` for a batch-wise assessment, omit it
+        otherwise. Requires admin authentication.
       operationId: adminGetRankList
       parameters:
         - name: assessment_id
@@ -3729,8 +3752,50 @@ paths:
             type: integer
         - $ref: '#/components/parameters/BatchIdQuery'
       responses:
-        '500':
-          description: Currently always returned — the controller method backing this route does not exist.
+        '200':
+          description: Rank list computed successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assessment_id:
+                    type: integer
+                  batch_id:
+                    type: integer
+                    nullable: true
+                  rank_list:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        rank:
+                          type: integer
+                          example: 1
+                        user_id:
+                          type: integer
+                        name:
+                          type: string
+                        score:
+                          type: number
+                        total_marks:
+                          type: integer
+                        percentage:
+                          type: number
+        '401':
+          description: Unauthenticated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Assessment not found or not owned by the authenticated admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: batch_id is missing/invalid for a batch-wise assessment, or no batch exists for this assessment yet.
           content:
             application/json:
               schema:
@@ -4970,8 +5035,8 @@ paths:
         Finalizes the in-progress attempt for the user's most recent assignment
         to this assessment. `mcq` assessments are graded immediately (with
         negative marking applied if `has_negative` is set, floored at 0);
-        `descriptive`, `coding` and `case_based` are marked `"Pending
-        Evaluation"` for an admin to grade later. No request body. Requires user authentication.
+        `descriptive` is marked `"Pending Evaluation"` for an admin to grade
+        later. No request body. Requires user authentication.
       operationId: userSubmitAttempt
       parameters:
         - in: path
@@ -5204,9 +5269,8 @@ paths:
         most one answer per question — calling again for the same question
         overwrites it). The required fields depend on the assessment's type:
         for `mcq`, `choice_id` is required and must be a choice belonging to
-        `question_id`; for `descriptive`/`coding`/`case_based`, `answer` is
-        required instead (free text; stored as code for `coding`) and
-        `choice_id` is ignored. Rejected with `403` once the attempt is
+        `question_id`; for `descriptive`, `answer` is required instead (free
+        text) and `choice_id` is ignored. Rejected with `403` once the attempt is
         submitted, or once the assessment's time window has closed (batch end
         time passed, or flexible duration elapsed). Requires user authentication.
       operationId: userSaveAnswer
@@ -5235,7 +5299,7 @@ paths:
                 answer:
                   type: string
                   nullable: true
-                  description: Required (and non-empty) for `descriptive`, `coding` and `case_based` questions; ignored for `mcq`.
+                  description: Required (and non-empty) for `descriptive` questions; ignored for `mcq`.
       responses:
         '200':
           description: Answer saved.

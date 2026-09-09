@@ -52,7 +52,7 @@ class AdminAuthController extends Controller
                 60 * 24 * 30, // 30 days
                 '/',
                 null,
-                false, // secure (true in prod)
+                app()->environment('production'), // secure
                 true   // httpOnly
             );
     }

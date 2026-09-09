@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AssessmentAssignment;
 use App\Models\Assessment;
-use App\Models\Batch;
 use App\Services\NotificationService;
 use App\Models\AssessmentAttempt;
 use App\Models\User;
@@ -17,25 +16,6 @@ class AssessmentAssignmentController extends Controller
     private function isBatchLocked($batch_id)
     {
         return AssessmentAttempt::where('batch_id', $batch_id)->exists();
-    }
-
-    private function resolveBatch($assessment, $batchId = null)
-    {
-        if ($assessment->is_batch_wise) {
-
-            if (!$batchId) {
-                abort(422, 'batch_id is required for batch-wise assessments');
-            }
-
-            return Batch::where('id', $batchId)
-                ->where('assessment_id', $assessment->id)
-                ->firstOrFail();
-        }
-
-        // always latest batch for non-batch-wise (re-exam safe)
-        return Batch::where('assessment_id', $assessment->id)
-            ->latest('id')
-            ->firstOrFail();
     }
 
     public function usersWithAssignmentStatus(Request $request)
@@ -50,34 +30,45 @@ class AssessmentAssignmentController extends Controller
             ->where('admin_id', $admin->id)
             ->firstOrFail();
 
-        $batch = $this->resolveBatch($assessment, $request->query('batch_id'));
+        // Same batch-resolution rule used by the admin results endpoints,
+        // so an invalid/missing batch_id fails the same way (422) everywhere
+        // instead of a 404 here and a 422 there.
+        $result = resolve_batch($assessment, $request->query('batch_id'));
+
+        if (isset($result['error'])) {
+            return $result['error'];
+        }
+
+        $batch = $result['batch'];
 
         $assignedUserIds = AssessmentAssignment::where('assessment_id', $assessment->id)
             ->where('batch_id', $batch->id)
             ->pluck('user_id')
             ->toArray();
 
+        // Fetch every conflict in one query instead of one query per user.
+        $conflictsByUser = collect();
+
+        if (!$assessment->is_flexible) {
+            $conflictsByUser = DB::table('assessment_assignments as aa')
+                ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
+                ->join('batches as b', 'b.id', '=', 'aa.batch_id')
+                ->where('a.id', '!=', $assessment->id)
+                ->whereDate('b.publish_date', $batch->publish_date)
+                ->where(function ($q) use ($batch) {
+                    $q->where('b.start_time', '<', $batch->end_time)
+                        ->where('b.end_time', '>', $batch->start_time);
+                })
+                ->select('aa.user_id', 'a.id', 'a.title')
+                ->get()
+                ->keyBy('user_id');
+        }
+
         $users = User::select('id', 'name')
             ->get()
-            ->map(function ($user) use ($assignedUserIds, $assessment, $batch) {
+            ->map(function ($user) use ($assignedUserIds, $conflictsByUser) {
 
-                $conflict = null;
-
-                if (!$assessment->is_flexible) {
-
-                    $conflict = DB::table('assessment_assignments as aa')
-                        ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
-                        ->join('batches as b', 'b.id', '=', 'aa.batch_id')
-                        ->where('aa.user_id', $user->id)
-                        ->where('a.id', '!=', $assessment->id)
-                        ->whereDate('b.publish_date', $batch->publish_date)
-                        ->where(function ($q) use ($batch) {
-                            $q->where('b.start_time', '<', $batch->end_time)
-                                ->where('b.end_time', '>', $batch->start_time);
-                        })
-                        ->select('a.id', 'a.title')
-                        ->first();
-                }
+                $conflict = $conflictsByUser->get($user->id);
 
                 return [
                     'user_id' => $user->id,
@@ -107,7 +98,13 @@ class AssessmentAssignmentController extends Controller
             ->where('admin_id', $admin->id)
             ->firstOrFail();
 
-        $batch = $this->resolveBatch($assessment, $validated['batch_id'] ?? null);
+        $result = resolve_batch($assessment, $validated['batch_id'] ?? null);
+
+        if (isset($result['error'])) {
+            return $result['error'];
+        }
+
+        $batch = $result['batch'];
 
         // lock after attempt
         if ($this->isBatchLocked($batch->id)) {
@@ -158,11 +155,25 @@ class AssessmentAssignmentController extends Controller
             if ($assignment) {
                 $assignment->restore();
             } else {
-                $assignment = AssessmentAssignment::create([
-                    'assessment_id' => $assessment->id,
-                    'user_id' => $userId,
-                    'batch_id' => $batch->id
-                ]);
+                // The find-then-create above isn't atomic, so a duplicate
+                // request racing this one can still hit the unique
+                // constraint; fall back to restoring/reusing it instead of
+                // failing the whole batch of assignments.
+                try {
+                    $assignment = AssessmentAssignment::create([
+                        'assessment_id' => $assessment->id,
+                        'user_id' => $userId,
+                        'batch_id' => $batch->id
+                    ]);
+                } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+                    $assignment = AssessmentAssignment::withTrashed()
+                        ->where('assessment_id', $assessment->id)
+                        ->where('user_id', $userId)
+                        ->where('batch_id', $batch->id)
+                        ->firstOrFail();
+
+                    $assignment->restore();
+                }
             }
 
             NotificationService::notifyUser(
@@ -201,7 +212,13 @@ class AssessmentAssignmentController extends Controller
             ->where('admin_id', $admin->id)
             ->firstOrFail();
 
-        $batch = $this->resolveBatch($assessment, $validated['batch_id'] ?? null);
+        $result = resolve_batch($assessment, $validated['batch_id'] ?? null);
+
+        if (isset($result['error'])) {
+            return $result['error'];
+        }
+
+        $batch = $result['batch'];
 
         // lock after attempt
         if ($this->isBatchLocked($batch->id)) {

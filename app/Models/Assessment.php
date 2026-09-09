@@ -3,11 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Assessment extends Model
 {
-    use SoftDeletes;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'admin_id',
@@ -15,9 +16,6 @@ class Assessment extends Model
         'title',
         'description',
         'is_active',
-        'publish_date',
-        'start_time',
-        'end_time',
         'difficulty_level',
         'shuffle',
         'is_library',
