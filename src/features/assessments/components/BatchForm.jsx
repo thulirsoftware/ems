@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import BatchService from "../../../services/batch.service";
 
 export default function BatchForm({
@@ -130,10 +131,10 @@ export default function BatchForm({
                 setErrors(backendErrors);
 
                 if (err.response.data.message) {
-                    alert(err.response.data.message);
+                    toast.error(err.response.data.message);
                 }
             } else {
-                alert(
+                toast.error(
                     err.response?.data?.message ||
                     "Failed to create batch."
                 );

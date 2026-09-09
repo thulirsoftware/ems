@@ -4,10 +4,11 @@ import {
   Users,
   Activity,
   Trophy,
-  TrendingUp,
 } from "lucide-react";
+import ReportPagination from "./ReportPagination";
 
-export default function AssessmentPerformanceTable({ data = [] }) {
+export default function AssessmentPerformanceTable({ result, onPageChange }) {
+  const data = result?.data || [];
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
 
@@ -72,63 +73,82 @@ export default function AssessmentPerformanceTable({ data = [] }) {
 
           <tbody>
 
-            {data.map((item) => (
-
-              <tr
-                key={item.id}
-                className="border-t hover:bg-gray-50 transition"
-              >
-
-                <td className="px-6 py-4 font-medium">
-                  {item.title}
+            {data.length === 0 && (
+              <tr>
+                <td colSpan={8} className="text-center py-8 text-gray-400">
+                  No assessments found
                 </td>
-
-                <td className="text-center">
-                  {item.questions}
-                </td>
-
-                <td className="text-center">
-                  {item.batches}
-                </td>
-
-                <td className="text-center">
-                  {item.attempts}
-                </td>
-
-                <td className="text-center font-semibold text-indigo-600">
-                  {item.average_score}
-                </td>
-
-                <td className="text-center text-green-600 font-semibold">
-                  <div className="flex items-center justify-center gap-1">
-                    <Trophy size={15} />
-                    {item.highest_score}
-                  </div>
-                </td>
-
-                <td className="text-center text-red-600 font-semibold">
-                  {item.lowest_score}
-                </td>
-
-                <td className="text-center">
-
-                  <span className="px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-semibold">
-
-                    {item.completion_rate}%
-
-                  </span>
-
-                </td>
-
               </tr>
+            )}
 
-            ))}
+            {data.map((item) => {
+              const completionRate = item.assigned > 0
+                ? Math.round((item.submitted / item.assigned) * 100)
+                : 0;
+
+              return (
+                <tr
+                  key={item.assessment_id}
+                  className="border-t hover:bg-gray-50 transition"
+                >
+
+                  <td className="px-6 py-4 font-medium">
+                    {item.title}
+                  </td>
+
+                  <td className="text-center">
+                    {item.questions}
+                  </td>
+
+                  <td className="text-center">
+                    {item.batches}
+                  </td>
+
+                  <td className="text-center">
+                    {item.attempts}
+                  </td>
+
+                  <td className="text-center font-semibold text-indigo-600">
+                    {item.average_percentage}%
+                  </td>
+
+                  <td className="text-center text-green-600 font-semibold">
+                    <div className="flex items-center justify-center gap-1">
+                      <Trophy size={15} />
+                      {item.highest_percentage}%
+                    </div>
+                  </td>
+
+                  <td className="text-center text-red-600 font-semibold">
+                    {item.lowest_percentage}%
+                  </td>
+
+                  <td className="text-center">
+
+                    <span className="px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-semibold">
+
+                      {completionRate}%
+
+                    </span>
+
+                  </td>
+
+                </tr>
+              );
+            })}
 
           </tbody>
 
         </table>
 
       </div>
+
+      <ReportPagination
+        currentPage={result?.current_page}
+        totalPages={result?.total_pages}
+        total={result?.total}
+        onPageChange={onPageChange}
+      />
 
     </div>
   );

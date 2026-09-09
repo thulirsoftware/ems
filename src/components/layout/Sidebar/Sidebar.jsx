@@ -78,7 +78,7 @@ export default function Sidebar() {
         {/* HEADER */}
         <div className="flex items-center bg-white justify-between p-4 border-b">
           <div className="text-xl font-semibold">
-            <img src={logo_img} alt="" />
+            <img src={logo_img} alt="Logo" />
             </div>
 
           <button

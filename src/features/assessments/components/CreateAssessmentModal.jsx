@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import AssessmentService from "../../../services/assesment.service";
 import QuestionSection from "./QuestionSection";
 import DescriptiveQuestionModal from "./DescriptiveQuestionModal";
@@ -133,7 +134,9 @@ export default function CreateAssessmentModal({ onClose, onSuccess }) {
 
             setAssessmentTypeSlug(selectedType?.slug || "");
 
-            setAssessmentId(res.id);
+            // createAssessment resolves to { message, data } — the created
+            // assessment is nested under `data`, not at the top level.
+            setAssessmentId(res.data.id);
 
             if (form.is_batch_wise) {
                 setStep(2); // Batch
@@ -158,11 +161,11 @@ export default function CreateAssessmentModal({ onClose, onSuccess }) {
 
             } else if (err.response?.status === 403) {
 
-                alert(err.response.data.message);
+                toast.error(err.response.data.message);
 
             } else {
 
-                alert(
+                toast.error(
                     err.response?.data?.message ||
                     "Failed to create assessment."
                 );

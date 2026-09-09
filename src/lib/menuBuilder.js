@@ -4,7 +4,7 @@ import {
   GraduationCap,
   ClipboardList,
   FileBarChart2,
-  Bot,
+  LineChart,
 } from "lucide-react";
 
 export const useMenuBuilder = () => {
@@ -35,9 +35,9 @@ export const useMenuBuilder = () => {
       icon: FileBarChart2,
     },
     {
-      label: "AI Interface",
-      path: "/admin/ai-interface",
-      icon: Bot,
+      label: "Analytics",
+      path: "/admin/analytics",
+      icon: LineChart,
     },
   ];
 };

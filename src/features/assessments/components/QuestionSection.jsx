@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "sonner";
 import AssessmentService from "../../../services/assesment.service";
 import * as XLSX from "xlsx";
 
@@ -127,12 +128,12 @@ export default function QuestionSection({ assessmentId }) {
     }
 
     if (choices.some((c) => !c.option.trim())) {
-      alert("All options are required");
+      toast.error("All options are required");
       return;
     }
 
     if (!choices.some((c) => c.is_correct)) {
-      alert("Select correct answer");
+      toast.error("Select correct answer");
       return;
     }
 
@@ -199,11 +200,11 @@ export default function QuestionSection({ assessmentId }) {
 
       } else if (err.response?.status === 403) {
 
-        alert(err.response.data.message);
+        toast.error(err.response.data.message);
 
       } else {
 
-        alert(
+        toast.error(
           err.response?.data?.message ||
           "Failed to save question."
         );
@@ -257,13 +258,13 @@ export default function QuestionSection({ assessmentId }) {
     ];
 
     if (!allowed.includes(file.type)) {
-      alert("Only CSV and XLSX files are allowed.");
+      toast.error("Only CSV and XLSX files are allowed.");
       e.target.value = "";
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      alert("Maximum file size is 5 MB.");
+      toast.error("Maximum file size is 5 MB.");
       e.target.value = "";
       return;
     }
@@ -281,7 +282,7 @@ export default function QuestionSection({ assessmentId }) {
 
       setImportRows(rows);
 
-      alert(`${rows.length} questions loaded. Click Import.`);
+      toast.success(`${rows.length} questions loaded. Click Import.`);
 
     };
 
@@ -294,7 +295,7 @@ export default function QuestionSection({ assessmentId }) {
   const importQuestions = async () => {
 
     if (importRows.length === 0) {
-      alert("No file loaded");
+      toast.error("No file loaded");
       return;
     }
 
@@ -345,14 +346,14 @@ export default function QuestionSection({ assessmentId }) {
 
       }
 
-      alert("Questions imported successfully");
+      toast.success("Questions imported successfully");
 
       setImportRows([]);
 
     } catch (err) {
 
       console.error(err);
-      alert("Import failed");
+      toast.error("Import failed");
 
     } finally {
 

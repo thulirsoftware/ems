@@ -1,4 +1,6 @@
 import { Pencil, Trash2, Users } from "lucide-react";
+import { PageLoader } from "../../../components/common/Spinner";
+import EmptyState from "../../../components/common/EmptyState";
 
 export default function BatchTable({
     batches = [],
@@ -10,8 +12,8 @@ export default function BatchTable({
 }) {
     if (loading) {
         return (
-            <div className="bg-white border rounded-lg p-8 text-center">
-                Loading batches...
+            <div className="bg-white border rounded-lg">
+                <PageLoader label="Loading batches..." />
             </div>
         );
     }
@@ -45,11 +47,8 @@ export default function BatchTable({
                 <tbody>
                     {batches.length === 0 ? (
                         <tr>
-                            <td
-                                colSpan="6"
-                                className="py-8 text-center text-gray-500"
-                            >
-                                No batches found.
+                            <td colSpan="6">
+                                <EmptyState title="No batches found" />
                             </td>
                         </tr>
                     ) : (

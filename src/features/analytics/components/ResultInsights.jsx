@@ -1,28 +1,43 @@
 import { Trophy, AlertTriangle, CheckCircle } from "lucide-react";
 
-export default function ResultInsights() {
+export default function ResultInsights({ assessments = [] }) {
+  const evaluated = assessments.filter((a) => a.evaluated > 0);
+
+  const top = evaluated.length
+    ? evaluated.reduce((a, b) => (b.average_percentage > a.average_percentage ? b : a))
+    : null;
+
+  const worst = evaluated.length
+    ? evaluated.reduce((a, b) => (b.average_percentage < a.average_percentage ? b : a))
+    : null;
+
+  const balanced = evaluated.length
+    ? evaluated.reduce((a, b) =>
+        Math.abs(b.pass_rate - 50) < Math.abs(a.pass_rate - 50) ? b : a
+      )
+    : null;
 
   const insights = [
     {
-      title: "Top Performing Exam",
-      value: "SQL Evaluation",
+      title: "Top Performing Assessment",
+      value: top?.title ?? "No data yet",
       icon: Trophy,
       color: "text-green-600 bg-green-50",
-      desc: "Average score 88%",
+      desc: top ? `Average score ${top.average_percentage}%` : "Awaiting evaluated attempts",
     },
     {
       title: "Needs Attention",
-      value: "System Design",
+      value: worst?.title ?? "No data yet",
       icon: AlertTriangle,
       color: "text-red-600 bg-red-50",
-      desc: "High failure rate detected",
+      desc: worst ? `Average score ${worst.average_percentage}%, ${worst.failed} failed` : "Awaiting evaluated attempts",
     },
     {
-      title: "Balanced Assessment",
-      value: "React Basics",
+      title: "Most Balanced Assessment",
+      value: balanced?.title ?? "No data yet",
       icon: CheckCircle,
       color: "text-indigo-600 bg-indigo-50",
-      desc: "Healthy pass/fail ratio",
+      desc: balanced ? `${balanced.pass_rate}% pass rate` : "Awaiting evaluated attempts",
     },
   ];
 

@@ -114,29 +114,48 @@ const AssessmentService = {
 
 
 
-  getAssessmentUsersForEvaluation: async (assessmentId) => {
-    const res = await http.get(`/admin/results/${assessmentId}/users`);
+  // batchId is required by the backend whenever the assessment is
+  // batch-wise (resolve_batch() 422s without it); harmless to omit for
+  // non-batch-wise assessments, which resolve to their single implicit batch.
+  getAssessmentUsersForEvaluation: async (assessmentId, batchId) => {
+    const res = await http.get(`/admin/results/${assessmentId}/users`, {
+      params: batchId ? { batch_id: batchId } : {},
+    });
     return res.data;
   },
-  getStudentAnswers: async (assessmentId, userId) => {
+  getStudentAnswers: async (assessmentId, userId, batchId) => {
     const res = await http.get(
-      `/admin/results/${assessmentId}/user/${userId}/answers`
+      `/admin/results/${assessmentId}/user/${userId}/answers`,
+      { params: batchId ? { batch_id: batchId } : {} }
     );
     return res.data;
   },
 
   // grade answer
-  gradeQuestion: async (assessmentId, userId, questionId, payload) => {
+  gradeQuestion: async (assessmentId, userId, questionId, payload, batchId) => {
     const res = await http.post(
       `/admin/results/${assessmentId}/user/${userId}/question/${questionId}/grade`,
-      payload
+      payload,
+      { params: batchId ? { batch_id: batchId } : {} }
     );
     return res.data;
   },
-  getUserResult: async (assessmentId, userId) => {
+  getUserResult: async (assessmentId, userId, batchId) => {
     const res = await http.get(
-      `/admin/results/${assessmentId}/user/${userId}`
+      `/admin/results/${assessmentId}/user/${userId}`,
+      { params: batchId ? { batch_id: batchId } : {} }
     );
+    return res.data;
+  },
+
+  getFinishedAssessments: async () => {
+    const res = await http.get("/admin/results/finished");
+    return res.data;
+  },
+  getRankList: async (assessmentId, batchId) => {
+    const res = await http.get(`/admin/results/${assessmentId}/rank-list`, {
+      params: batchId ? { batch_id: batchId } : {},
+    });
     return res.data;
   },
 

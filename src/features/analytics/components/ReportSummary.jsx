@@ -1,12 +1,11 @@
 import { Users, ClipboardList, TrendingUp, Target } from "lucide-react";
 
-export default function ReportSummary() {
-
+export default function ReportSummary({ summary }) {
   const stats = [
-    { label: "Total Students", value: 1248, icon: Users },
-    { label: "Total Attempts", value: 4210, icon: ClipboardList },
-    { label: "Average Score", value: "78%", icon: TrendingUp },
-    { label: "Pass Rate", value: "84%", icon: Target },
+    { label: "Total Students", value: summary?.totals?.candidates ?? 0, icon: Users },
+    { label: "Total Attempts", value: summary?.attempts?.total ?? 0, icon: ClipboardList },
+    { label: "Average Score", value: `${summary?.performance?.average_percentage ?? 0}%`, icon: TrendingUp },
+    { label: "Pass Rate", value: `${summary?.performance?.pass_rate ?? 0}%`, icon: Target },
   ];
 
   return (

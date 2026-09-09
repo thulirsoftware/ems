@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { toast } from "sonner";
 import PageHeader from "../../../components/common/PageHeader";
 import AssessmentService from "../../../services/assesment.service";
 import { MoreVertical, Plus, Search } from "lucide-react";
@@ -8,6 +9,10 @@ import EditAssessmentModal from "../components/EditAssessmentModal";
 import AssignAssessmentModal from "../components/AssignAssessmentModal";
 import EvaluateStudentsModal from "../components/EvaluateStudentsModal";
 import BatchService from "../../../services/batch.service";
+import { PageLoader } from "../../../components/common/Spinner";
+import ErrorState from "../../../components/common/ErrorState";
+import { EmptyTableRow } from "../../../components/common/EmptyState";
+import { useConfirm } from "../../../hooks/useConfirm";
 
 const PER_PAGE = 10;
 
@@ -23,16 +28,19 @@ export default function AssessmentList() {
   const [assessmentTypes, setAssessmentTypes] = useState([]);
   const [evaluateId, setEvaluateId] = useState(null);
   const [batches, setBatches] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
 
   useEffect(() => {
     fetchAssessments();
 
-    AssessmentService.getAssessmentTypes().then((data) => {
-      setAssessmentTypes(data || []);
-    });
-    BatchService.getBatches().then((data) => {
-      setBatches(data || []);
-    });
+    AssessmentService.getAssessmentTypes()
+      .then((data) => setAssessmentTypes(data || []))
+      .catch(() => toast.error("Failed to load assessment types"));
+    BatchService.getBatches()
+      .then((data) => setBatches(data || []))
+      .catch(() => toast.error("Failed to load batches"));
 
   }, []);
   const typeMap = useMemo(() => {
@@ -53,9 +61,17 @@ export default function AssessmentList() {
   }, [batches]);
 
   const fetchAssessments = async () => {
-    const data = await AssessmentService.AssessmentList();
-    console.log("data", data);
-    setAssessments(data || []);
+    setLoading(true);
+    setError(false);
+    try {
+      const data = await AssessmentService.AssessmentList();
+      setAssessments(data || []);
+    } catch {
+      setError(true);
+      toast.error("Failed to load assessments");
+    } finally {
+      setLoading(false);
+    }
   };
 
   /* ---------------- SEARCH FILTER ---------------- */
@@ -144,29 +160,37 @@ export default function AssessmentList() {
 
       {/* TABLE */}
       <div className="bg-white rounded-xl shadow-md p-2 ">
-        <div className="overflow-x-auto h-screen">
+        <div className="overflow-x-auto">
+          {loading ? (
+            <PageLoader label="Loading assessments..." />
+          ) : error ? (
+            <ErrorState
+              title="Couldn't load assessments"
+              onRetry={fetchAssessments}
+            />
+          ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-gray-50">
-                <th className="text-left py-3 px-3 text-red-600">#</th>
-                <th className="text-left py-3 px-3 text-red-600">Title</th>
-                <th className="text-left py-3 px-3 text-red-600">Type</th>
-                <th className="text-left py-3 px-3 text-red-600">
+                <th className="text-left py-3 px-3 text-gray-600">#</th>
+                <th className="text-left py-3 px-3 text-gray-600">Title</th>
+                <th className="text-left py-3 px-3 text-gray-600">Type</th>
+                <th className="text-left py-3 px-3 text-gray-600">
                   Batch
                 </th>
-                <th className="text-left py-3 px-3 text-red-600">Publish</th>
-                <th className="text-left py-3 px-3 text-red-600">Time</th>
-                <th className="text-left py-3 px-3 text-red-600">Status</th>
-                <th className="text-center py-3 px-3 text-red-600">Assign</th>
-                <th className="text-center py-3 px-3 text-red-600">Action</th>
+                <th className="text-left py-3 px-3 text-gray-600">Publish</th>
+                <th className="text-left py-3 px-3 text-gray-600">Time</th>
+                <th className="text-left py-3 px-3 text-gray-600">Status</th>
+                <th className="text-center py-3 px-3 text-gray-600">Assign</th>
+                <th className="text-center py-3 px-3 text-gray-600">Action</th>
               </tr>
             </thead>
 
             <tbody>
               {paginatedData.map((item, index) => (
                 <tr
-                  key={item.id}
-                  className="border-b hover:bg-red-50 transition"
+                  key={item.is_batch_wise ? `${item.id}-${item.batch_id}` : item.id}
+                  className="border-b hover:bg-gray-50 transition"
                 >
                   <td className="py-3 px-3">
                     {(currentPage - 1) * PER_PAGE + index + 1}
@@ -234,7 +258,12 @@ export default function AssessmentList() {
                           <button
                             className="block w-full px-4 py-2 text-left hover:bg-gray-100 text-blue-600"
                             onClick={() => {
-                              setEvaluateId(item.id);
+                              setEvaluateId({
+                                assessmentId: item.id,
+                                batchId: item.is_batch_wise
+                                  ? item.batch_id
+                                  : null,
+                              });
                               setOpenMenu(null);
                             }}
                           >
@@ -268,10 +297,20 @@ export default function AssessmentList() {
                         <button
                           className="block w-full px-4 py-2 text-left text-red-600 hover:bg-red-50"
                           onClick={async () => {
-                            if (!confirm("Delete this assessment?")) return;
-                            await AssessmentService.deleteAssessment(item.id);
-                            fetchAssessments();
                             setOpenMenu(null);
+                            const ok = await confirm({
+                              title: "Delete this assessment?",
+                              description: "This action cannot be undone.",
+                              confirmLabel: "Delete",
+                            });
+                            if (!ok) return;
+                            try {
+                              await AssessmentService.deleteAssessment(item.id);
+                              toast.success("Assessment deleted");
+                              fetchAssessments();
+                            } catch {
+                              toast.error("Failed to delete assessment");
+                            }
                           }}
                         >
                           Delete
@@ -283,26 +322,23 @@ export default function AssessmentList() {
               ))}
 
               {paginatedData.length === 0 && (
-                <tr>
-                  <td colSpan="7" className="text-center py-8 text-gray-400">
-                    No assessments found
-                  </td>
-                </tr>
+                <EmptyTableRow colSpan={9} title="No assessments found" />
               )}
             </tbody>
           </table>
+          )}
         </div>
       </div>
 
       {/* PAGINATION */}
-      {totalPages > 1 && (
+      {!loading && !error && totalPages > 1 && (
         <div className="flex justify-center mt-6 gap-2">
           {[...Array(totalPages)].map((_, index) => (
             <button
               key={index}
               onClick={() => handlePageChange(index + 1)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition ${currentPage === index + 1
-                ? "bg-red-600 text-white shadow-md"
+                ? "bg-purple-600 text-white shadow-md"
                 : "bg-gray-100 hover:bg-gray-200"
                 }`}
             >
@@ -311,6 +347,8 @@ export default function AssessmentList() {
           ))}
         </div>
       )}
+
+      {confirmDialog}
 
       {/* MODALS */}
       {showModal && (
@@ -326,6 +364,7 @@ export default function AssessmentList() {
       {viewAssessment && (
         <ViewAssessmentModal
           assessment={viewAssessment}
+          typeName={typeMap[viewAssessment.assessment_type_id]}
           onClose={() => setViewAssessment(null)}
         />
       )}
@@ -346,7 +385,8 @@ export default function AssessmentList() {
       )}
       {evaluateId && (
         <EvaluateStudentsModal
-          assessmentId={evaluateId}
+          assessmentId={evaluateId.assessmentId}
+          batchId={evaluateId.batchId}
           onClose={() => setEvaluateId(null)}
         />
       )}

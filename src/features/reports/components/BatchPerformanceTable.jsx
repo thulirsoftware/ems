@@ -5,8 +5,10 @@ import {
   Trophy,
   GraduationCap,
 } from "lucide-react";
+import ReportPagination from "./ReportPagination";
 
-export default function BatchPerformanceTable({ data = [] }) {
+export default function BatchPerformanceTable({ result, onPageChange }) {
+  const data = result?.data || [];
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
 
@@ -73,10 +75,18 @@ export default function BatchPerformanceTable({ data = [] }) {
 
           <tbody>
 
+            {data.length === 0 && (
+              <tr>
+                <td colSpan={8} className="text-center py-8 text-gray-400">
+                  No batches found
+                </td>
+              </tr>
+            )}
+
             {data.map((batch) => (
 
               <tr
-                key={batch.id}
+                key={batch.batch_id}
                 className="border-t hover:bg-gray-50 transition"
               >
 
@@ -89,7 +99,7 @@ export default function BatchPerformanceTable({ data = [] }) {
                       size={18}
                     />
 
-                    {batch.batch}
+                    {batch.batch_name}
 
                   </div>
 
@@ -97,13 +107,13 @@ export default function BatchPerformanceTable({ data = [] }) {
 
                 <td>
 
-                  {batch.assessment}
+                  {batch.assessment_title}
 
                 </td>
 
                 <td className="text-center">
 
-                  {batch.assigned_students}
+                  {batch.assigned}
 
                 </td>
 
@@ -122,7 +132,7 @@ export default function BatchPerformanceTable({ data = [] }) {
                       <div
                         className="bg-emerald-500 h-2 rounded-full"
                         style={{
-                          width: `${batch.completion_rate}%`,
+                          width: `${batch.participation_rate}%`,
                         }}
                       />
 
@@ -130,7 +140,7 @@ export default function BatchPerformanceTable({ data = [] }) {
 
                     <p className="text-xs mt-1 font-semibold">
 
-                      {batch.completion_rate}%
+                      {batch.participation_rate}%
 
                     </p>
 
@@ -140,7 +150,7 @@ export default function BatchPerformanceTable({ data = [] }) {
 
                 <td className="text-center font-semibold text-indigo-600">
 
-                  {batch.average_score}
+                  {batch.average_percentage}%
 
                 </td>
 
@@ -150,7 +160,7 @@ export default function BatchPerformanceTable({ data = [] }) {
 
                     <Trophy size={15} />
 
-                    {batch.highest_score}
+                    {batch.highest_percentage}%
 
                   </div>
 
@@ -158,7 +168,7 @@ export default function BatchPerformanceTable({ data = [] }) {
 
                 <td className="text-center text-red-600 font-semibold">
 
-                  {batch.lowest_score}
+                  {batch.lowest_percentage}%
 
                 </td>
 
@@ -171,6 +181,13 @@ export default function BatchPerformanceTable({ data = [] }) {
         </table>
 
       </div>
+
+      <ReportPagination
+        currentPage={result?.current_page}
+        totalPages={result?.total_pages}
+        total={result?.total}
+        onPageChange={onPageChange}
+      />
 
     </div>
   );

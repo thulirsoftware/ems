@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "sonner";
 import AssessmentService from "../../../services/assesment.service";
 import * as XLSX from "xlsx";
 
@@ -14,7 +15,7 @@ export default function DescriptiveQuestionModal({ assessmentId }) {
   const submitQuestion = async () => {
 
     if (!questionText.trim()) {
-      alert("Question is required");
+      toast.error("Question is required");
       return;
     }
 
@@ -40,7 +41,7 @@ export default function DescriptiveQuestionModal({ assessmentId }) {
     } catch (err) {
 
       console.error(err);
-      alert("Failed to save question");
+      toast.error("Failed to save question");
 
     } finally {
 
@@ -88,7 +89,7 @@ export default function DescriptiveQuestionModal({ assessmentId }) {
 
       setImportRows(rows);
 
-      alert(`${rows.length} questions ready to import`);
+      toast.success(`${rows.length} questions ready to import`);
 
     };
 
@@ -101,7 +102,7 @@ export default function DescriptiveQuestionModal({ assessmentId }) {
   const importQuestions = async () => {
 
     if (importRows.length === 0) {
-      alert("Upload file first");
+      toast.error("Upload file first");
       return;
     }
 
@@ -130,12 +131,12 @@ export default function DescriptiveQuestionModal({ assessmentId }) {
       }
 
       setImportRows([]);
-      alert("Questions imported successfully");
+      toast.success("Questions imported successfully");
 
     } catch (err) {
 
       console.error(err);
-      alert("Import failed");
+      toast.error("Import failed");
 
     } finally {
 

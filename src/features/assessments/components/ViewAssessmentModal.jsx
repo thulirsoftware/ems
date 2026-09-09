@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import AssessmentService from "../../../services/assesment.service";
 import BatchService from "../../../services/batch.service";
-export default function ViewAssessmentModal({ assessment, onClose }) {
+export default function ViewAssessmentModal({ assessment, typeName, onClose }) {
   const [activeTab, setActiveTab] = useState("details");
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -44,11 +44,14 @@ export default function ViewAssessmentModal({ assessment, onClose }) {
 
       setBatches(data || []);
 
-      const users = {};
+      const usersByBatch = await Promise.all(
+        (data || []).map((batch) => BatchService.getBatchUsers(batch.id))
+      );
 
-      for (const batch of data) {
-        users[batch.id] = await BatchService.getBatchUsers(batch.id);
-      }
+      const users = {};
+      (data || []).forEach((batch, i) => {
+        users[batch.id] = usersByBatch[i];
+      });
 
       setBatchUsers(users);
     } catch (err) {
@@ -124,7 +127,7 @@ export default function ViewAssessmentModal({ assessment, onClose }) {
               <div>
                 <b>Assessment Type</b>
                 <p className="text-gray-600">
-                  {assessment.assessment_type?.name || "-"}
+                  {typeName || "-"}
                 </p>
               </div>
 

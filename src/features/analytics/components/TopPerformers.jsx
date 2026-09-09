@@ -1,13 +1,6 @@
 import { Trophy } from "lucide-react";
 
-export default function TopPerformers() {
-
-  const students = [
-    { name: "Kiran", score: 96 },
-    { name: "Arun", score: 92 },
-    { name: "Meena", score: 90 },
-  ];
-
+export default function TopPerformers({ students = [] }) {
   return (
     <div className="bg-white border rounded-xl p-6">
 
@@ -16,9 +9,13 @@ export default function TopPerformers() {
         <h3 className="font-semibold">Top Performers</h3>
       </div>
 
+      {students.length === 0 && (
+        <p className="text-sm text-gray-400 py-3">No evaluated attempts yet</p>
+      )}
+
       {students.map((s, i) => (
         <div
-          key={i}
+          key={s.user_id ?? i}
           className="flex justify-between py-3 border-b last:border-none"
         >
           <span className="font-medium">
@@ -26,7 +23,7 @@ export default function TopPerformers() {
           </span>
 
           <span className="text-indigo-600 font-semibold">
-            {s.score}%
+            {s.average_percentage}%
           </span>
         </div>
       ))}

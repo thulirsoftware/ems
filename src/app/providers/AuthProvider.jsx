@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuthStore } from "../../store/authStore";
 import authService from "../../services/auth.service";
+import { PageLoader } from "../../components/common/Spinner";
 
 export default function AuthProvider({ children }) {
   const token = useAuthStore((s) => s.token);
@@ -24,8 +25,8 @@ export default function AuthProvider({ children }) {
       }
 
       try {
-        const res = await authService.me();
-        login(token, res.admin);
+        const admin = await authService.me();
+        login(token, admin);
       } catch (err) {
         logout();
       } finally {
@@ -39,7 +40,7 @@ export default function AuthProvider({ children }) {
   if (loading) {
     return (
       <div className="w-full h-screen flex items-center justify-center">
-        Loading...
+        <PageLoader label="Loading..." />
       </div>
     );
   }

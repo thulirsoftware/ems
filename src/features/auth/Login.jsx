@@ -17,7 +17,7 @@ import slide3 from "../../assets/images/posters/3.jpg";
 
 const schema = z.object({
     email: z.string().email("Invalid email"),
-    password: z.string().min(4, "Minimum 4 characters"),
+    password: z.string().min(8, "Minimum 8 characters"),
 });
 
 const images = [slide1, slide2, slide3];
@@ -51,7 +51,6 @@ export default function Login() {
             setLoading(true);
 
             const res = await authService.login(data);
-            console.log("LOGIN RESPONSE 👉", res);
 
             if (!res?.token) {
                 throw new Error("Token not received");

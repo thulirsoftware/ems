@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import AssessmentService from "../../../services/assesment.service";
 import * as XLSX from "xlsx";
 
@@ -27,7 +28,7 @@ export default function EditDescriptiveQuestionModal({ assessmentId }) {
   const addQuestion = async () => {
 
     if (!questionText.trim()) {
-      alert("Question is required");
+      toast.error("Question is required");
       return;
     }
 
@@ -54,7 +55,7 @@ export default function EditDescriptiveQuestionModal({ assessmentId }) {
     } catch (err) {
 
       console.error(err);
-      alert("Failed to add question");
+      toast.error("Failed to add question");
 
     } finally {
 
@@ -80,7 +81,7 @@ export default function EditDescriptiveQuestionModal({ assessmentId }) {
   const updateQuestion = async () => {
 
     if (!questionText.trim()) {
-      alert("Question is required");
+      toast.error("Question is required");
       return;
     }
 
@@ -88,10 +89,12 @@ export default function EditDescriptiveQuestionModal({ assessmentId }) {
 
       setLoading(true);
 
+      const existing = questions.find((q) => q.id === editingId);
+
       const payload = {
         type: "descriptive",
         question_text: questionText,
-        order: 1
+        order: existing?.order ?? 1
       };
 
       const updated =
@@ -110,7 +113,7 @@ export default function EditDescriptiveQuestionModal({ assessmentId }) {
     } catch (err) {
 
       console.error(err);
-      alert("Update failed");
+      toast.error("Update failed");
 
     } finally {
 
@@ -158,7 +161,7 @@ export default function EditDescriptiveQuestionModal({ assessmentId }) {
 
       setImportRows(rows);
 
-      alert(`${rows.length} questions ready to import`);
+      toast.success(`${rows.length} questions ready to import`);
 
     };
 
@@ -172,7 +175,7 @@ export default function EditDescriptiveQuestionModal({ assessmentId }) {
   const importQuestions = async () => {
 
     if (importRows.length === 0) {
-      alert("Upload file first");
+      toast.error("Upload file first");
       return;
     }
 
@@ -201,12 +204,12 @@ export default function EditDescriptiveQuestionModal({ assessmentId }) {
       }
 
       setImportRows([]);
-      alert("Questions imported successfully");
+      toast.success("Questions imported successfully");
 
     } catch (err) {
 
       console.error(err);
-      alert("Import failed");
+      toast.error("Import failed");
 
     } finally {
 

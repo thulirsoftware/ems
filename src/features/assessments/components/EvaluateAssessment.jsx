@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 import AssessmentService from "../../../services/assesment.service";
+import { PageLoader } from "../../../components/common/Spinner";
 
 export default function EvaluateAssessment() {
 
   const { assessmentId, userId } = useParams();
+  const [searchParams] = useSearchParams();
+  const batchId = searchParams.get("batch_id");
   const navigate = useNavigate();
 
   const [questions, setQuestions] = useState([]);
@@ -22,7 +26,8 @@ export default function EvaluateAssessment() {
 
       const data = await AssessmentService.getStudentAnswers(
         assessmentId,
-        userId
+        userId,
+        batchId
       );
 
       const formatted = (data?.questions || []).map((q) => ({
@@ -36,7 +41,7 @@ export default function EvaluateAssessment() {
       setQuestions(formatted);
 
     } catch (err) {
-      console.error("Failed to load answers", err);
+      toast.error(err?.response?.data?.message || "Failed to load answers");
     } finally {
       setLoading(false);
     }
@@ -53,7 +58,8 @@ export default function EvaluateAssessment() {
         assessmentId,
         userId,
         questionId,
-        { is_correct: value }
+        { is_correct: value },
+        batchId
       );
 
       const updatedQuestions = questions.map((q) =>
@@ -71,18 +77,14 @@ export default function EvaluateAssessment() {
 
       if (allGraded) {
 
-        const result = await AssessmentService.getUserResult(
-          assessmentId,
-          userId
+        navigate(
+          `/admin/result/${assessmentId}/${userId}` +
+            (batchId ? `?batch_id=${batchId}` : "")
         );
-
-        navigate(`/admin/result/${assessmentId}/${userId}`, {
-          state: { result }
-        });
       }
 
     } catch (err) {
-      console.error("Grading failed", err);
+      toast.error(err?.response?.data?.message || "Failed to save grade");
     }
   };
 
@@ -91,11 +93,7 @@ export default function EvaluateAssessment() {
   -------------------------------------------------- */
 
   if (loading) {
-    return (
-      <div className="p-10 text-center text-gray-500">
-        Loading answers...
-      </div>
-    );
+    return <PageLoader label="Loading answers..." />;
   }
 
   if (!questions.length) {

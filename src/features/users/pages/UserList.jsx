@@ -1,24 +1,33 @@
 import { useEffect, useState } from "react";
 import PageHeader from "../../../components/common/PageHeader";
 import UserService from "../../../services/user.service";
-import { Eye } from "lucide-react";
 import AddUserModal from "../components/AddUserModal";
+import BulkImportUsersModal from "../components/BulkImportUsersModal";
+import { toast } from "sonner";
+import { UploadCloud } from "lucide-react";
+import { PageLoader } from "../../../components/common/Spinner";
+import { EmptyTableRow } from "../../../components/common/EmptyState";
 
 export default function UserList() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showBulkModal, setShowBulkModal] = useState(false);
 
   useEffect(() => {
     fetchUsers();
   }, []);
 
   const fetchUsers = async () => {
+    setLoading(true);
+
     try {
       const data = await UserService.UserList();
-      setUsers(data);
+      setUsers(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error("Failed to fetch users", error);
+      toast.error(
+        error?.response?.data?.message || "Failed to load users."
+      );
     } finally {
       setLoading(false);
     }
@@ -33,6 +42,16 @@ export default function UserList() {
         onAction={() => setShowModal(true)}
       />
 
+      <div className="flex justify-end mb-4">
+        <button
+          onClick={() => setShowBulkModal(true)}
+          className="flex items-center gap-2 px-4 py-2 rounded-md border border-purple-600 text-purple-600 hover:bg-purple-50"
+        >
+          <UploadCloud size={16} />
+          Bulk Import
+        </button>
+      </div>
+
       {showModal && (
         <AddUserModal
           onClose={() => setShowModal(false)}
@@ -43,42 +62,36 @@ export default function UserList() {
         />
       )}
 
+      {showBulkModal && (
+        <BulkImportUsersModal
+          onClose={() => setShowBulkModal(false)}
+          onSuccess={fetchUsers}
+        />
+      )}
+
       <div className="bg-white rounded-xl shadow-md p-6">
         {loading ? (
-          <p className="text-center text-gray-500 py-10">
-            Loading users...
-          </p>
+          <PageLoader label="Loading users..." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b">
-                  <th className="text-left text-red-600 font-semibold py-4 px-3">
+                  <th className="text-left text-gray-600 font-semibold py-4 px-3">
                     #
                   </th>
-                  <th className="text-left text-red-600 font-semibold py-4 px-3">
+                  <th className="text-left text-gray-600 font-semibold py-4 px-3">
                     Name
                   </th>
-                  <th className="text-left text-red-600 font-semibold py-4 px-3">
+                  <th className="text-left text-gray-600 font-semibold py-4 px-3">
                     Email
                   </th>
-                  <th className="text-left text-red-600 font-semibold py-4 px-3">
-                    Status
-                  </th>
-                  
                 </tr>
               </thead>
 
               <tbody>
                 {users.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan="5"
-                      className="text-center py-8 text-gray-400"
-                    >
-                      No users found
-                    </td>
-                  </tr>
+                  <EmptyTableRow colSpan={3} title="No users found" />
                 ) : (
                   users.map((user, index) => (
                     <tr
@@ -99,7 +112,7 @@ export default function UserList() {
                             />
                           ) : (
                             <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-semibold">
-                              {user.name.charAt(0)}
+                              {user.name?.charAt(0)?.toUpperCase() || "?"}
                             </div>
                           )}
                           <span className="font-medium text-gray-800">
@@ -111,14 +124,6 @@ export default function UserList() {
                       <td className="py-4 px-3 text-gray-600">
                         {user.email}
                       </td>
-
-                      <td className="py-4 px-3">
-                        <span className="bg-green-100 text-green-600 px-4 py-1 rounded-full text-sm font-medium">
-                          Active
-                        </span>
-                      </td>
-
-                      
                     </tr>
                   ))
                 )}

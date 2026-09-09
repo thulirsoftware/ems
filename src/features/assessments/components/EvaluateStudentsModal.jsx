@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import AssessmentService from "../../../services/assesment.service";
 import { useNavigate } from "react-router-dom";
 
-export default function EvaluateStudentsModal({ assessmentId, onClose }) {
+export default function EvaluateStudentsModal({ assessmentId, batchId, onClose }) {
     const [students, setStudents] = useState([]);
     const navigate = useNavigate();
 
@@ -12,7 +12,8 @@ export default function EvaluateStudentsModal({ assessmentId, onClose }) {
 
     const fetchStudents = async () => {
         const data = await AssessmentService.getAssessmentUsersForEvaluation(
-            assessmentId
+            assessmentId,
+            batchId
         );
         setStudents(data || []);
     };
@@ -64,7 +65,10 @@ export default function EvaluateStudentsModal({ assessmentId, onClose }) {
                                     <button
                                         className="px-3 py-1 bg-purple-600 text-white rounded-md text-sm hover:bg-purple-700 transition"
                                         onClick={() =>
-                                            navigate(`/admin/evaluate/${assessmentId}/${student.user_id}`)
+                                            navigate(
+                                                `/admin/evaluate/${assessmentId}/${student.user_id}` +
+                                                    (batchId ? `?batch_id=${batchId}` : "")
+                                            )
                                         }
                                     >
                                         Evaluate

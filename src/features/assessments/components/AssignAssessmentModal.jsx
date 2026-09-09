@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import AssessmentService from "../../../services/assesment.service";
 
 export default function AssignAssessmentModal({
@@ -41,7 +42,7 @@ export default function AssignAssessmentModal({
             .map(u => u.user_id);
 
         if (newUsers.length === 0) {
-            alert("No new users selected");
+            toast.error("No new users selected");
             return;
         }
 
@@ -71,14 +72,14 @@ export default function AssignAssessmentModal({
 
             }
 
-            alert(message);
+            toast.success(message);
 
             onClose();
 
         } catch (err) {
 
             console.error(err);
-            alert("Assignment failed");
+            toast.error("Assignment failed");
 
         } finally {
 

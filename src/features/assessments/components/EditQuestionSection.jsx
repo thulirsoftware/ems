@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import AssessmentService from "../../../services/assesment.service";
 import * as XLSX from "xlsx";
 
@@ -82,17 +83,17 @@ export default function EditQuestionSection({ assessmentId }) {
   const addQuestion = async () => {
 
     if (!questionText.trim()) {
-      alert("Question is required");
+      toast.error("Question is required");
       return;
     }
 
     if (choices.some((c) => !c.option.trim())) {
-      alert("All options are required");
+      toast.error("All options are required");
       return;
     }
 
     if (!choices.some((c) => c.is_correct)) {
-      alert("Select correct answer");
+      toast.error("Select correct answer");
       return;
     }
 
@@ -124,7 +125,7 @@ export default function EditQuestionSection({ assessmentId }) {
     } catch (err) {
 
       console.error(err);
-      alert("Failed to add question");
+      toast.error("Failed to add question");
 
     } finally {
 
@@ -139,17 +140,17 @@ export default function EditQuestionSection({ assessmentId }) {
   const updateQuestion = async () => {
 
     if (!questionText.trim()) {
-      alert("Question is required");
+      toast.error("Question is required");
       return;
     }
 
     if (choices.some((c) => !c.option.trim())) {
-      alert("All options are required");
+      toast.error("All options are required");
       return;
     }
 
     if (!choices.some((c) => c.is_correct)) {
-      alert("Select correct answer");
+      toast.error("Select correct answer");
       return;
     }
 
@@ -183,7 +184,7 @@ export default function EditQuestionSection({ assessmentId }) {
     } catch (err) {
 
       console.error(err?.response?.data || err);
-      alert("Failed to update question");
+      toast.error("Failed to update question");
 
     } finally {
 
@@ -236,7 +237,7 @@ export default function EditQuestionSection({ assessmentId }) {
 
       setImportRows(rows);
 
-      alert(`${rows.length} questions ready to import`);
+      toast.success(`${rows.length} questions ready to import`);
 
     };
 
@@ -249,7 +250,7 @@ export default function EditQuestionSection({ assessmentId }) {
   const importQuestions = async () => {
 
     if (importRows.length === 0) {
-      alert("Upload file first");
+      toast.error("Upload file first");
       return;
     }
 
@@ -301,12 +302,12 @@ export default function EditQuestionSection({ assessmentId }) {
       }
 
       setImportRows([]);
-      alert("Questions imported successfully");
+      toast.success("Questions imported successfully");
 
     } catch (err) {
 
       console.error(err);
-      alert("Import failed");
+      toast.error("Import failed");
 
     } finally {
 

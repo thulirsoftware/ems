@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { X, Eye, EyeOff } from "lucide-react";
+import { toast } from "sonner";
 import UserService from "../../../services/user.service";
 
 export default function AddUserModal({ onClose, onSuccess }) {
@@ -35,8 +36,8 @@ export default function AddUserModal({ onClose, onSuccess }) {
     // Password
     if (!form.password) {
       newErrors.password = "Password is required.";
-    } else if (form.password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters.";
+    } else if (form.password.length < 8) {
+      newErrors.password = "Password must be at least 8 characters.";
     }
 
     setErrors(newErrors);
@@ -81,7 +82,7 @@ export default function AddUserModal({ onClose, onSuccess }) {
 
         setErrors(formattedErrors);
       } else {
-        alert(err.response?.data?.message || "Failed to create user.");
+        toast.error(err.response?.data?.message || "Failed to create user.");
       }
     } finally {
       setLoading(false);

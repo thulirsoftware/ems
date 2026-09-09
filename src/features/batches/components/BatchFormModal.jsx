@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import BatchService from "../../../services/batch.service";
 
 export default function BatchFormModal({
@@ -50,19 +51,34 @@ export default function BatchFormModal({
         });
     };
 
+    // <input type="time" step="1"> should yield "HH:mm:ss", but browser
+    // support for the seconds sub-field is inconsistent — pad explicitly so
+    // the backend's date_format:H:i:s validation never fails on that alone.
+    const withSeconds = (value) => {
+        if (!value) return value;
+        return value.length === 5 ? `${value}:00` : value;
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        const payload = {
+            ...form,
+            capacity: Number(form.capacity),
+            start_time: withSeconds(form.start_time),
+            end_time: withSeconds(form.end_time),
+        };
 
         try {
             setLoading(true);
 
             if (batch) {
-                await BatchService.updateBatch(batch.id, form);
+                await BatchService.updateBatch(batch.id, payload);
             } else {
-                await BatchService.createBatch(form);
+                await BatchService.createBatch(payload);
             }
 
-            alert(
+            toast.success(
                 batch
                     ? "Batch updated successfully."
                     : "Batch created successfully."
@@ -71,7 +87,7 @@ export default function BatchFormModal({
             onSuccess();
             onClose();
         } catch (err) {
-            alert(
+            toast.error(
                 err.response?.data?.message ||
                     "Something went wrong."
             );
@@ -111,14 +127,20 @@ export default function BatchFormModal({
                                     Select Assessment
                                 </option>
 
-                                {assessments.map((item) => (
-                                    <option
-                                        key={item.id}
-                                        value={item.id}
-                                    >
-                                        {item.title || item.name}
-                                    </option>
-                                ))}
+                                {Array.from(
+                                    new Map(
+                                        assessments
+                                            .filter((item) => item.is_batch_wise)
+                                            .map((item) => [item.id, item])
+                                    ).values()
+                                ).map((item) => (
+                                        <option
+                                            key={item.id}
+                                            value={item.id}
+                                        >
+                                            {item.title || item.name}
+                                        </option>
+                                    ))}
                             </select>
                         </div>
 

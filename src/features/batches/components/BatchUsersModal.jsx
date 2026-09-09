@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search, X, Users } from "lucide-react";
+import { toast } from "sonner";
 
 import BatchService from "../../../services/batch.service";
 import UserService from "../../../services/user.service";
@@ -45,7 +46,7 @@ export default function BatchUsersModal({
             );
         } catch (err) {
             console.error(err);
-            alert("Failed to load users.");
+            toast.error("Failed to load users.");
         } finally {
             setLoading(false);
         }
@@ -86,13 +87,26 @@ export default function BatchUsersModal({
         try {
             setSaving(true);
 
-            await BatchService.addUsersToBatch(batch.id, {
+            const res = await BatchService.addUsersToBatch(batch.id, {
                 user_ids: selectedAvailable,
             });
 
+            if (res?.blocked_due_to_conflict?.length) {
+                const names = res.blocked_due_to_conflict
+                    .map((c) => {
+                        const user = users.find((u) => u.id === c.user_id);
+                        return `${user?.name || `User #${c.user_id}`} (conflicts with "${c.conflicting_assessment_title}")`;
+                    })
+                    .join("\n");
+
+                toast.error(
+                    `${res.assigned?.length || 0} user(s) assigned.\n\nThe following users could not be assigned because they already have another exam scheduled at the same time:\n\n${names}`
+                );
+            }
+
             await loadData();
         } catch (err) {
-            alert(
+            toast.error(
                 err.response?.data?.message ||
                 "Unable to assign users."
             );
@@ -112,7 +126,7 @@ export default function BatchUsersModal({
 
             await loadData();
         } catch (err) {
-            alert(
+            toast.error(
                 err.response?.data?.message ||
                 "Unable to remove users."
             );
@@ -344,7 +358,7 @@ overflow-y-auto
                             <h3 className="font-semibold">
                                 Assigned Users
                                 <span className="ml-2 text-sm text-gray-500">
-                                    ({filteredAssigned.length})
+                                    ({batchUsers.length}{batch?.capacity ? ` / ${batch.capacity}` : ""})
                                 </span>
                             </h3>
 
@@ -444,7 +458,14 @@ overflow-y-auto
                         Close
                     </button>
 
-                    <div className="flex gap-3">
+                    <div className="flex items-center gap-3">
+
+                        {batch?.capacity &&
+                            batchUsers.length + selectedAvailable.length > batch.capacity && (
+                                <span className="text-xs text-red-600">
+                                    Exceeds capacity ({batch.capacity})
+                                </span>
+                            )}
 
                         <button
                             disabled={
@@ -460,7 +481,9 @@ overflow-y-auto
                         <button
                             disabled={
                                 saving ||
-                                selectedAvailable.length === 0
+                                selectedAvailable.length === 0 ||
+                                (batch?.capacity &&
+                                    batchUsers.length + selectedAvailable.length > batch.capacity)
                             }
                             onClick={assignUsers}
                             className="px-5 py-2 bg-green-600 text-white rounded-lg disabled:opacity-50"

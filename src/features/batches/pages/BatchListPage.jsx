@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useMemo } from "react";
+import { toast } from "sonner";
 import PageHeader from "../../../components/common/PageHeader";
 import BatchFilter from "../components/BatchFilter";
 import BatchTable from "../components/BatchTable";
@@ -7,12 +8,14 @@ import BatchService from "../../../services/batch.service";
 import BatchFormModal from "../components/BatchFormModal";
 import AssessmentService from "../../../services/assesment.service";
 import BatchUsersModal from "../components/BatchUsersModal";
+import { useConfirm } from "../../../hooks/useConfirm";
 
 
 export default function BatchListPage() {
     const [batches, setBatches] = useState([]);
     const [loading, setLoading] = useState(false);
     const [manageBatch, setManageBatch] = useState(null);
+    const [confirm, confirmDialog] = useConfirm();
 
     const [filters, setFilters] = useState({
         search: "",
@@ -29,7 +32,7 @@ export default function BatchListPage() {
             const res = await AssessmentService.AssessmentList(1, 1000);
             setAssessments(res || []);
         } catch (err) {
-            console.error("Failed to load assessments", err);
+            toast.error("Failed to load assessments");
         }
     };
 
@@ -42,7 +45,7 @@ export default function BatchListPage() {
 
             setBatches(Array.isArray(response) ? response : []);
         } catch (error) {
-            console.error("Failed to load batches", error);
+            toast.error("Failed to load batches");
         } finally {
             setLoading(false);
         }
@@ -75,14 +78,19 @@ export default function BatchListPage() {
     };
 
     const handleDelete = async (batch) => {
-        if (!window.confirm(`Delete "${batch.name}"?`)) return;
+        const ok = await confirm({
+            title: `Delete "${batch.name}"?`,
+            confirmLabel: "Delete",
+            variant: "danger",
+        });
+        if (!ok) return;
 
         try {
             await BatchService.deleteBatch(batch.id);
             await loadBatches();
         } catch (error) {
             console.error(error);
-            alert(error?.response?.data?.message || "Unable to delete batch.");
+            toast.error(error?.response?.data?.message || "Unable to delete batch.");
         }
     };
 
@@ -146,6 +154,7 @@ export default function BatchListPage() {
                 batch={manageBatch}
                 onClose={() => setManageBatch(null)}
             />
+            {confirmDialog}
         </div>
     );
 }

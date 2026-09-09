@@ -14,7 +14,6 @@ import AnalyticsPage from "../features/analytics/pages/AnalyticsPage";
 import EvaluateAssessment from "../features/assessments/components/EvaluateAssessment";
 import ManualCorrectionResultPage from "../features/assessments/components/ManualCorrectionResultPage";
 import BatchListPage from "../features/batches/pages/BatchListPage";
-import AIPage from "../features/ai/pages/AIPage";
 
 export const router = createBrowserRouter([
   {
@@ -43,7 +42,6 @@ export const router = createBrowserRouter([
       { path: "analytics", element: <AnalyticsPage /> },
       { path: "evaluate/:assessmentId/:userId", element: <EvaluateAssessment /> },
       { path: "result/:assessmentId/:userId", element: <ManualCorrectionResultPage /> },
-      { path: "ai-interface", element: <AIPage /> },
     ],
   },
 

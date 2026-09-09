@@ -1,17 +1,56 @@
-import { useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { CheckCircle } from "lucide-react";
+import AssessmentService from "../../../services/assesment.service";
+import { PageLoader } from "../../../components/common/Spinner";
 
 export default function ManualCorrectionResultPage() {
 
-  const { state } = useLocation();
+  const { assessmentId, userId } = useParams();
+  const [searchParams] = useSearchParams();
+  const batchId = searchParams.get("batch_id");
   const navigate = useNavigate();
 
-  const result = state?.result;
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  if (!result) {
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const data = await AssessmentService.getUserResult(
+          assessmentId,
+          userId,
+          batchId
+        );
+
+        if (!cancelled) setResult(data);
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err?.response?.data?.message || "Unable to load result."
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [assessmentId, userId, batchId]);
+
+  if (loading) {
+    return <PageLoader label="Loading result..." />;
+  }
+
+  if (error || !result) {
     return (
       <div className="p-10 text-center text-gray-500">
-        No result available
+        {error || "No result available"}
       </div>
     );
   }
@@ -42,7 +81,7 @@ export default function ManualCorrectionResultPage() {
           <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
             <p className="text-sm text-gray-500">Score</p>
             <p className="text-2xl font-bold text-green-600">
-              {result.score}
+              {result.score} / {result.total_marks}
             </p>
           </div>
 
@@ -63,7 +102,7 @@ export default function ManualCorrectionResultPage() {
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
             <p className="text-sm text-gray-500">Incorrect</p>
             <p className="text-2xl font-bold text-red-600">
-              {result.incorrect}
+              {result.wrong}
             </p>
           </div>
 
