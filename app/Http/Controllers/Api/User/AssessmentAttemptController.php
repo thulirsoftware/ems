@@ -42,11 +42,11 @@ class AssessmentAttemptController extends Controller
         // Strict timing only for starting
         $isAvailable = false;
 
-        if ($assessment->is_flexible) {
+        if ($assessment->scheduling_type === Assessment::SCHEDULING_FLEXIBLE) {
 
             $isAvailable =
-                !$batch->expiry_date ||
-                $batch->expiry_date >= $today;
+                (!$batch->publish_date || $batch->publish_date <= $today) &&
+                (!$batch->expiry_date || $batch->expiry_date >= $today);
 
         } else {
 
@@ -67,12 +67,17 @@ class AssessmentAttemptController extends Controller
             ->where('batch_id', $assignment->batch_id)
             ->first();
 
+        $hideBatch = is_implicit_batch($assessment, $batch);
+
         if ($existing) {
 
             if (!$existing->submitted_at) {
                 return response()->json([
                     'message' => 'Resume your current attempt',
-                    'attempt' => $existing
+                    'attempt' => [
+                        ...$existing->toArray(),
+                        'batch_id' => $hideBatch ? null : $existing->batch_id,
+                    ],
                 ], 200);
             }
 
@@ -90,7 +95,10 @@ class AssessmentAttemptController extends Controller
 
         return response()->json([
             'message' => 'Assessment started',
-            'attempt' => $attempt
+            'attempt' => [
+                ...$attempt->toArray(),
+                'batch_id' => $hideBatch ? null : $attempt->batch_id,
+            ],
         ], 201);
     }
 

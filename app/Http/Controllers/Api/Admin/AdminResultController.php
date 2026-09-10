@@ -46,7 +46,7 @@ class AdminResultController extends Controller
 
                 $isFinished = false;
 
-                if ($assessment->is_flexible) {
+                if ($assessment->scheduling_type === Assessment::SCHEDULING_FLEXIBLE) {
 
                     $isFinished = true;
 
@@ -66,15 +66,7 @@ class AdminResultController extends Controller
 
                 $result[] = [
                     ...$assessment->toArray(),
-
-                    'batch_id' => $batch->id,
-
-                    'publish_date' => $batch->publish_date,
-                    'start_time' => $batch->start_time,
-                    'end_time' => $batch->end_time,
-
-                    'expiry_date' => $batch->expiry_date,
-                    'duration_minutes' => $batch->duration_minutes,
+                    ...batch_schedule_fields($assessment, $batch),
                 ];
             }
         }
@@ -188,7 +180,7 @@ class AdminResultController extends Controller
 
         return response()->json([
             'assessment_id' => $assessment_id,
-            'batch_id' => $batchId,
+            'batch_id' => is_implicit_batch($assessment, $batch) ? null : $batchId,
             'user_id' => $user_id,
             'questions' => $data
         ]);
@@ -374,7 +366,7 @@ class AdminResultController extends Controller
 
         return response()->json([
             'assessment_id' => $assessment_id,
-            'batch_id' => $batchId,
+            'batch_id' => is_implicit_batch($assessment, $batch) ? null : $batchId,
             'user_id' => $user_id,
             'score' => $scoreValue,
             'total_marks' => $totalQuestions,
@@ -438,7 +430,7 @@ class AdminResultController extends Controller
 
         return response()->json([
             'assessment_id' => (int) $assessment_id,
-            'batch_id' => $batchId,
+            'batch_id' => is_implicit_batch($assessment, $batch) ? null : $batchId,
             'rank_list' => $rankList,
         ]);
     }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\User;
 
 use App\Http\Controllers\Controller;
+use App\Models\Assessment;
 use App\Models\AssessmentAssignment;
 use App\Models\Batch;
 use Illuminate\Http\Request;
@@ -35,15 +36,7 @@ class UserAssessmentController extends Controller
 
             return [
                 ...$assessment->toArray(),
-
-                'batch_id' => $batch?->id,
-
-                'publish_date' => $batch?->publish_date,
-                'start_time' => $batch?->start_time,
-                'end_time' => $batch?->end_time,
-
-                'expiry_date' => $batch?->expiry_date,
-                'duration_minutes' => $batch?->duration_minutes,
+                ...batch_schedule_fields($assessment, $batch),
             ];
         })->values();
     }
@@ -65,7 +58,7 @@ class UserAssessmentController extends Controller
 
             $assessment = $assignment->assessment;
 
-            if ($assessment->is_flexible) {
+            if ($assessment->scheduling_type === Assessment::SCHEDULING_FLEXIBLE) {
                 return false;
             }
 
@@ -105,7 +98,7 @@ class UserAssessmentController extends Controller
 
             $assessment = $assignment->assessment;
 
-            if ($assessment->is_flexible) {
+            if ($assessment->scheduling_type === Assessment::SCHEDULING_FLEXIBLE) {
                 return false;
             }
 
@@ -151,10 +144,10 @@ class UserAssessmentController extends Controller
             if (!$batch)
                 return false;
 
-            if ($assessment->is_flexible) {
+            if ($assessment->scheduling_type === Assessment::SCHEDULING_FLEXIBLE) {
                 $isRunning =
-                    !$batch->expiry_date ||
-                    $batch->expiry_date >= $today;
+                    (!$batch->publish_date || $batch->publish_date <= $today) &&
+                    (!$batch->expiry_date || $batch->expiry_date >= $today);
 
             } else {
                 $isRunning =
@@ -229,7 +222,7 @@ class UserAssessmentController extends Controller
                 return false;
             }
 
-            if ($assignment->assessment->is_flexible) {
+            if ($assignment->assessment->scheduling_type === Assessment::SCHEDULING_FLEXIBLE) {
                 return false;
             }
 

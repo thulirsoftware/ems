@@ -15,7 +15,7 @@ class BatchSeeder extends Seeder
 
         foreach (Assessment::all() as $assessment) {
 
-            if ($assessment->is_batch_wise) {
+            if ($assessment->scheduling_type === Assessment::SCHEDULING_BATCH_WISE) {
 
                 // Two batches with different schedules so admin batch/report
                 // endpoints and the assignment time-conflict check have
@@ -41,12 +41,14 @@ class BatchSeeder extends Seeder
                 continue;
             }
 
-            if ($assessment->is_flexible) {
+            if ($assessment->scheduling_type === Assessment::SCHEDULING_FLEXIBLE) {
 
-                // Available anytime before expiry_date; timed per attempt via duration_minutes.
+                // Available anytime within [publish_date, expiry_date]
+                // (start_date/end_date), timed per attempt via duration_minutes.
                 Batch::create([
                     'assessment_id' => $assessment->id,
                     'name' => 'individual_batch_' . $assessment->id,
+                    'publish_date' => $today,
                     'expiry_date' => app_now()->addDays(30)->toDateString(),
                     'duration_minutes' => 30,
                 ]);

@@ -36,7 +36,7 @@ class UserReportController extends Controller
     private function scopedAttempts($userId, $validated)
     {
         $query = AssessmentAttempt::where('user_id', $userId)
-            ->with(['assessment:id,title,assessment_type_id', 'assessment.type:id,slug']);
+            ->with(['assessment:id,title,assessment_type_id,scheduling_type', 'assessment.type:id,slug']);
 
         if (!empty($validated['assessment_id'])) {
             $query->where('assessment_id', $validated['assessment_id']);
@@ -184,14 +184,16 @@ class UserReportController extends Controller
 
             $result = attempt_result($attempt);
             $percentage = $result['percentage'] ?? null;
+            $batch = $batches->get($attempt->batch_id);
+            $hideBatch = is_implicit_batch($attempt->assessment, $batch);
 
             return [
                 'attempt_id' => $attempt->id,
                 'assessment_id' => $attempt->assessment_id,
                 'assessment_title' => $attempt->assessment?->title,
                 'type' => $attempt->assessment?->type?->slug,
-                'batch_id' => $attempt->batch_id,
-                'batch_name' => $batches->get($attempt->batch_id)?->name,
+                'batch_id' => $hideBatch ? null : $attempt->batch_id,
+                'batch_name' => $hideBatch ? null : $batch?->name,
 
                 'attempt_date' => $attempt->created_at?->toDateString(),
                 'started_at' => $attempt->started_at,
@@ -226,6 +228,10 @@ class UserReportController extends Controller
 
         $attemptsById = $attempts->keyBy('id');
 
+        $batches = Batch::whereIn('id', $attempts->pluck('batch_id')->filter()->unique())
+            ->get()
+            ->keyBy('id');
+
         $answers = DB::table('assessment_answers')
             ->whereIn('attempt_id', $attempts->pluck('id'))
             ->whereNull('deleted_at')
@@ -235,16 +241,17 @@ class UserReportController extends Controller
             ->get()
             ->keyBy('id');
 
-        $rows = $answers->map(function ($answer) use ($questions, $attemptsById) {
+        $rows = $answers->map(function ($answer) use ($questions, $attemptsById, $batches) {
 
             $question = $questions->get($answer->question_id);
             $attempt = $attemptsById->get($answer->attempt_id);
+            $hideBatch = $attempt && is_implicit_batch($attempt->assessment, $batches->get($attempt->batch_id));
 
             return [
                 'attempt_id' => $answer->attempt_id,
                 'assessment_id' => $attempt?->assessment_id,
                 'assessment_title' => $attempt?->assessment?->title,
-                'batch_id' => $attempt?->batch_id,
+                'batch_id' => $hideBatch ? null : $attempt?->batch_id,
 
                 'question_id' => $answer->question_id,
                 'question_text' => $question?->question_text,
@@ -290,6 +297,10 @@ class UserReportController extends Controller
 
         $attempts = $this->scopedAttempts($user->id, $validated)->sortBy('id');
 
+        $batches = Batch::whereIn('id', $attempts->pluck('batch_id')->filter()->unique())
+            ->get()
+            ->keyBy('id');
+
         $running = [];
         $rows = [];
 
@@ -307,7 +318,9 @@ class UserReportController extends Controller
                 'attempt_id' => $attempt->id,
                 'assessment_id' => $attempt->assessment_id,
                 'assessment_title' => $attempt->assessment?->title,
-                'batch_id' => $attempt->batch_id,
+                'batch_id' => is_implicit_batch($attempt->assessment, $batches->get($attempt->batch_id))
+                    ? null
+                    : $attempt->batch_id,
 
                 'attempt_date' => $attempt->created_at?->toDateString(),
                 'submitted_at' => $attempt->submitted_at,

@@ -13,7 +13,7 @@ class AssessmentTypeSeeder extends Seeder
         // assessment.type.slug to decide auto-grading (mcq) vs manual
         // evaluation (descriptive).
         AssessmentType::create([
-            'name' => 'Objective',
+            'name' => 'MCQ',
             'slug' => 'mcq',
             'description' => 'Multiple-choice questions, auto-graded on submission.',
             'is_active' => true,

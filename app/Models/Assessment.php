@@ -10,6 +10,16 @@ class Assessment extends Model
 {
     use HasFactory, SoftDeletes;
 
+    const SCHEDULING_BATCH_WISE = 'batch_wise';
+    const SCHEDULING_FIXED = 'fixed';
+    const SCHEDULING_FLEXIBLE = 'flexible';
+
+    const SCHEDULING_TYPES = [
+        self::SCHEDULING_BATCH_WISE,
+        self::SCHEDULING_FIXED,
+        self::SCHEDULING_FLEXIBLE,
+    ];
+
     protected $fillable = [
         'admin_id',
         'assessment_type_id',
@@ -21,8 +31,7 @@ class Assessment extends Model
         'is_library',
         'has_negative',
         'negative_marks',
-        'is_batch_wise',
-        'is_flexible'
+        'scheduling_type',
     ];
 
     protected $hidden = [

@@ -17,14 +17,30 @@ class AdminBatchController extends Controller
         return AssessmentAttempt::where('batch_id', $batch_id)->exists();
     }
 
+    // Batch CRUD only ever manages explicitly-created batches belonging to
+    // batch_wise assessments. Fixed/flexible assessments each carry a single
+    // implicit batch that's managed through the Assessment APIs instead
+    // (see AssessmentController) and must stay invisible here.
+    private function findManageableBatch($admin, $id)
+    {
+        return Batch::batchWiseOnly()
+            ->where('id', $id)
+            ->whereHas('assessment', function ($q) use ($admin) {
+                $q->where('admin_id', $admin->id);
+            })
+            ->firstOrFail();
+    }
+
     public function index(Request $request)
     {
         $admin = $request->user('admins');
 
         return response()->json(
-            Batch::whereHas('assessment', function ($q) use ($admin) {
-                $q->where('admin_id', $admin->id);
-            })->get()
+            Batch::batchWiseOnly()
+                ->whereHas('assessment', function ($q) use ($admin) {
+                    $q->where('admin_id', $admin->id);
+                })
+                ->get()
         );
     }
 
@@ -35,6 +51,12 @@ class AdminBatchController extends Controller
         $assessment = Assessment::where('id', $assessment_id)
             ->where('admin_id', $admin->id)
             ->firstOrFail();
+
+        if ($assessment->scheduling_type !== Assessment::SCHEDULING_BATCH_WISE) {
+            return response()->json([
+                'message' => 'Batches are only managed via this endpoint for batch_wise assessments'
+            ], 422);
+        }
 
         $batches = Batch::where('assessment_id', $assessment->id)->get();
 
@@ -58,6 +80,12 @@ class AdminBatchController extends Controller
             ->where('admin_id', $admin->id)
             ->firstOrFail();
 
+        if ($assessment->scheduling_type !== Assessment::SCHEDULING_BATCH_WISE) {
+            return response()->json([
+                'message' => 'Batches can only be created for batch_wise assessments'
+            ], 422);
+        }
+
         $conflict = Batch::where('assessment_id', $assessment->id)
             ->whereDate('publish_date', $validated['publish_date'])
             ->where(function ($q) use ($validated) {
@@ -70,28 +98,12 @@ class AdminBatchController extends Controller
             return response()->json(['message' => 'Batch time conflict'], 422);
         }
 
-        if (!$assessment->is_batch_wise) {
-            $exists = Batch::where('assessment_id', $assessment->id)
-                ->where('name', 'individual_batch_' . $assessment->id)
-                ->exists();
-
-            if ($exists) {
-                return response()->json(['message' => 'Default batch exists'], 422);
-            }
-        }
-
         return response()->json(Batch::create($validated), 201);
     }
 
     public function show(Request $request, $id)
     {
-        $admin = $request->user('admins');
-
-        $batch = Batch::where('id', $id)
-            ->whereHas('assessment', function ($q) use ($admin) {
-                $q->where('admin_id', $admin->id);
-            })
-            ->firstOrFail();
+        $batch = $this->findManageableBatch($request->user('admins'), $id);
 
         return response()->json($batch);
     }
@@ -100,11 +112,7 @@ class AdminBatchController extends Controller
     {
         $admin = $request->user('admins');
 
-        $batch = Batch::where('id', $id)
-            ->whereHas('assessment', function ($q) use ($admin) {
-                $q->where('admin_id', $admin->id);
-            })
-            ->firstOrFail();
+        $batch = $this->findManageableBatch($admin, $id);
 
         if ($this->isBatchLocked($batch->id)) {
             return response()->json([
@@ -141,28 +149,6 @@ class AdminBatchController extends Controller
             return response()->json(['message' => 'Batch time conflict'], 422);
         }
 
-        $assessment = Assessment::find($batch->assessment_id);
-
-        if ($assessment && !$assessment->is_batch_wise) {
-
-            $defaultName = 'individual_batch_' . $assessment->id;
-            $newName = $validated['name'] ?? $batch->name;
-
-            if ($newName === $defaultName) {
-
-                $existingDefault = Batch::where('assessment_id', $assessment->id)
-                    ->where('name', $defaultName)
-                    ->where('id', '!=', $batch->id)
-                    ->exists();
-
-                if ($existingDefault) {
-                    return response()->json([
-                        'message' => 'Default batch already exists for this assessment'
-                    ], 422);
-                }
-            }
-        }
-
         $batch->update($validated);
 
         return response()->json($batch);
@@ -172,27 +158,12 @@ class AdminBatchController extends Controller
     {
         $admin = $request->user('admins');
 
-        $batch = Batch::where('id', $id)
-            ->whereHas('assessment', function ($q) use ($admin) {
-                $q->where('admin_id', $admin->id);
-            })
-            ->firstOrFail();
+        $batch = $this->findManageableBatch($admin, $id);
 
         if ($this->isBatchLocked($batch->id)) {
             return response()->json([
                 'message' => 'Cannot delete batch after it has been attempted'
             ], 403);
-        }
-
-        $assessment = Assessment::find($batch->assessment_id);
-
-        // A non-batch-wise assessment always has exactly one implicit batch;
-        // every other endpoint (starting an attempt, admin results, re-exams)
-        // assumes it exists. Deleting it would leave the assessment unusable.
-        if ($assessment && !$assessment->is_batch_wise) {
-            return response()->json([
-                'message' => 'Cannot delete the only batch of a non-batch-wise assessment'
-            ], 422);
         }
 
         $batch->delete();
@@ -202,13 +173,7 @@ class AdminBatchController extends Controller
 
     public function getUsersByBatchId(Request $request, $id)
     {
-        $admin = $request->user('admins');
-
-        $batch = Batch::where('id', $id)
-            ->whereHas('assessment', function ($q) use ($admin) {
-                $q->where('admin_id', $admin->id);
-            })
-            ->firstOrFail();
+        $batch = $this->findManageableBatch($request->user('admins'), $id);
 
         $users = User::whereIn(
             'id',
@@ -223,11 +188,7 @@ class AdminBatchController extends Controller
     {
         $admin = $request->user('admins');
 
-        $batch = Batch::where('id', $id)
-            ->whereHas('assessment', function ($q) use ($admin) {
-                $q->where('admin_id', $admin->id);
-            })
-            ->firstOrFail();
+        $batch = $this->findManageableBatch($admin, $id);
 
         if ($this->isBatchLocked($batch->id)) {
             return response()->json([
@@ -266,11 +227,7 @@ class AdminBatchController extends Controller
     {
         $admin = $request->user('admins');
 
-        $batch = Batch::where('id', $id)
-            ->whereHas('assessment', function ($q) use ($admin) {
-                $q->where('admin_id', $admin->id);
-            })
-            ->firstOrFail();
+        $batch = $this->findManageableBatch($admin, $id);
 
         if ($this->isBatchLocked($batch->id)) {
             return response()->json([

@@ -161,11 +161,12 @@ components:
       required: false
       description: >-
         Batch to scope the request to. **Required** when the assessment is
-        batch-wise (`is_batch_wise = true`) — there is no default to fall back to,
-        and the request returns `422` if omitted or if the ID does not belong to
-        this assessment. For non-batch-wise assessments this is optional and
-        defaults to the assessment's most recently created batch (the one
-        auto-created alongside it, or the latest re-exam batch).
+        batch-wise (`scheduling_type = batch_wise`) — there is no default to fall
+        back to, and the request returns `422` if omitted or if the ID does not
+        belong to this assessment. For non-batch-wise assessments (`fixed` or
+        `flexible`) this is optional and defaults to the assessment's most
+        recently created batch (the one auto-created alongside it, or the latest
+        re-exam batch).
       schema:
         type: integer
 
@@ -280,9 +281,9 @@ components:
       description: >-
         An exam definition: questions, grading rules and scheduling mode. Owned by
         exactly one admin. Once at least one attempt exists against it, its
-        structural fields (questions, choices, `is_batch_wise`, `is_flexible`) and
-        the assessment itself become locked against modification/deletion — see
-        each endpoint's `403` response.
+        structural fields (questions, choices, `scheduling_type`) and the
+        assessment itself become locked against modification/deletion — see each
+        endpoint's `403` response.
       properties:
         id:
           type: integer
@@ -317,35 +318,58 @@ components:
           type: number
           nullable: true
           description: Marks deducted per wrong MCQ answer when `has_negative` is true.
-        is_batch_wise:
-          type: boolean
+        scheduling_type:
+          type: string
+          enum: [batch_wise, fixed, flexible]
           description: >-
-            Scheduling mode. When true, the assessment can have multiple batches and
-            every request that resolves a batch (start, assignments, results, ...)
-            requires an explicit `batch_id`. When false, exactly one batch is
-            managed implicitly (auto-created on assessment creation) and `batch_id`
-            is resolved automatically. Immutable after creation.
-        is_flexible:
-          type: boolean
-          description: >-
-            When true, the assessment has no fixed publish/start/end time — it can
-            be attempted any time up until its batch's `expiry_date` (if set), and
-            `duration_minutes` on the batch bounds how long a single attempt may
-            run. Mutually exclusive with `is_batch_wise`. Immutable after creation.
-            Assessments with this flag do not support re-exams.
+            Scheduling mode. Immutable after creation. Each mode accepts only
+            its own schedule fields on create/update — supplying a field that
+            belongs to a different mode is rejected with `422`, and the
+            fields required by the chosen mode must be supplied together.
+
+            - `batch_wise`: scheduling is handled entirely through Batch CRUD
+            (`/admin/batches`) instead of the Assessment APIs — `publish_date`,
+            `start_time`, `end_time`, `start_date`, `end_date` and
+            `duration_minutes` are all rejected on this assessment. It can have
+            multiple explicitly-created batches, and every request that
+            resolves a batch (start, assignments, results, ...) requires an
+            explicit `batch_id`. Only batches belonging to a batch_wise
+            assessment are ever visible through Batch CRUD.
+
+            - `fixed`: requires `publish_date`, `start_time` and `end_time`,
+            managed directly through the Assessment APIs (not Batch CRUD).
+            Exactly one batch is managed implicitly (auto-created on assessment
+            creation, never exposed via Batch CRUD) and `batch_id` is resolved
+            automatically.
+
+            - `flexible`: requires `start_date`, `end_date` and
+            `duration_minutes` (also managed directly through the Assessment
+            APIs) instead of a fixed start/end time — it can be attempted any
+            time within `[start_date, end_date]`, and `duration_minutes` bounds
+            how long a single attempt may run, capped so it can never run past
+            `end_date` even if started near the end of the window. Also uses
+            one implicit, never-exposed batch. Assessments with this scheduling
+            type do not support re-exams.
 
     AssessmentBatchScheduleFull:
       type: object
       description: >-
-        Schedule fields copied from the batch this (assessment, batch) row is
-        attached to. `publish_date`/`start_time`/`end_time` apply to non-flexible
-        scheduling; `expiry_date`/`duration_minutes` apply to flexible scheduling.
-        Both sets are present but only one set is meaningful, depending on the
-        assessment's `is_flexible` flag.
+        Schedule fields flattened from the batch this (assessment, batch) row
+        is attached to (its `batch_id`, but never the batch as a separate,
+        manageable entity — see `Assessment.scheduling_type`). Every key is
+        always present for a uniform row shape, but only one set is
+        populated, depending on scheduling_type: `publish_date`/`start_time`/
+        `end_time` for `fixed` and `batch_wise`; `start_date`/`end_date`/
+        `duration_minutes` for `flexible`.
       properties:
         batch_id:
           type: integer
           nullable: true
+          description: >-
+            Null for `fixed`/`flexible` assessments — their single implicit
+            batch is never exposed as an addressable ID anywhere. Populated
+            only for `batch_wise` assessments (or a fixed/flexible
+            assessment's re-exam batch, a distinct, explicitly-created batch).
         publish_date:
           type: string
           format: date
@@ -358,26 +382,32 @@ components:
           type: string
           nullable: true
           example: '11:00:00'
-        expiry_date:
+        start_date:
           type: string
           format: date
           nullable: true
-          description: Last day this flexible assessment can be attempted. Null means no expiry.
+          description: First day this flexible assessment can be attempted.
+        end_date:
+          type: string
+          format: date
+          nullable: true
+          description: Last day this flexible assessment can be attempted.
         duration_minutes:
           type: integer
           nullable: true
-          description: Time limit for a single attempt of this flexible assessment. Null means unlimited.
+          description: Per-attempt time limit for this flexible assessment, capped to never run past end_date.
 
     AssessmentBatchScheduleBasic:
       type: object
       description: >-
         Reduced schedule fields returned only by the admin "upcoming assessments"
         listing, which never includes flexible assessments and therefore omits
-        `expiry_date`/`duration_minutes`.
+        `start_date`/`end_date`/`duration_minutes`.
       properties:
         batch_id:
           type: integer
           nullable: true
+          description: Null for a `fixed` assessment's implicit batch — see `AssessmentBatchScheduleFull.batch_id`.
         publish_date:
           type: string
           format: date
@@ -415,11 +445,14 @@ components:
     Batch:
       type: object
       description: >-
-        A scheduled instance of an assessment for a group of users. Non-batch-wise
-        assessments get exactly one batch, auto-created with the reserved name
-        `individual_batch_{assessment_id}`; batch-wise assessments can have many.
-        Once any attempt exists against a batch, it is locked against
-        modification/deletion and against adding/removing assigned users.
+        A scheduled instance of an assessment for a group of users. Batch CRUD
+        (`/admin/batches`) only ever creates and returns batches belonging to
+        `batch_wise` assessments — the single implicit batch every
+        fixed/flexible assessment carries is managed through the Assessment
+        APIs instead (`Assessment.scheduling_type`) and never appears here,
+        even by ID. Once any attempt exists against a batch, it is locked
+        against modification/deletion and against adding/removing assigned
+        users.
       properties:
         id:
           type: integer
@@ -432,26 +465,31 @@ components:
           type: string
           format: date
           nullable: true
-          description: Date the batch is available on, for non-flexible scheduling.
+          description: Date the batch is available on.
         start_time:
           type: string
           nullable: true
           example: '10:00:00'
-          description: Time-of-day the window opens, for non-flexible scheduling. Format `H:i:s`.
+          description: Time-of-day the window opens. Format `H:i:s`.
         end_time:
           type: string
           nullable: true
           example: '11:00:00'
-          description: Time-of-day the window closes, for non-flexible scheduling. Format `H:i:s`. Must be after `start_time`.
+          description: Time-of-day the window closes. Format `H:i:s`. Must be after `start_time`.
         expiry_date:
           type: string
           format: date
           nullable: true
-          description: Last day this batch can be attempted, for flexible scheduling. Null means no expiry.
+          description: >-
+            Not used through Batch CRUD (always null there) — only ever set on
+            a flexible assessment's internal implicit batch, where it holds
+            `end_date`.
         duration_minutes:
           type: integer
           nullable: true
-          description: Per-attempt time limit, for flexible scheduling. Null means unlimited.
+          description: >-
+            Not used through Batch CRUD (always null there) — only ever set on
+            a flexible assessment's internal implicit batch.
         capacity:
           type: integer
           nullable: true
@@ -552,6 +590,10 @@ components:
         batch_id:
           type: integer
           nullable: true
+          description: >-
+            Internally always set, but returned as null whenever it points to
+            a fixed/flexible assessment's implicit batch — see
+            `AssessmentBatchScheduleFull.batch_id`.
         assigned_at:
           type: string
           format: date-time
@@ -574,6 +616,10 @@ components:
         batch_id:
           type: integer
           nullable: true
+          description: >-
+            Internally always set, but returned as null whenever it points to
+            a fixed/flexible assessment's implicit batch — see
+            `AssessmentBatchScheduleFull.batch_id`.
         started_at:
           type: string
           nullable: true
@@ -727,10 +773,9 @@ components:
               nullable: true
             is_active:
               type: boolean
-            is_batch_wise:
-              type: boolean
-            is_flexible:
-              type: boolean
+            scheduling_type:
+              type: string
+              enum: [batch_wise, fixed, flexible]
             questions:
               type: integer
             batches:
@@ -749,7 +794,12 @@ components:
         - $ref: '#/components/schemas/ReportPerformance'
 
     AdminReportBatchRow:
-      description: Aggregate stats for one batch, matching the current filters.
+      description: >-
+        Aggregate stats for one batch, matching the current filters. Like
+        Batch CRUD, this report only ever lists batches belonging to
+        batch_wise assessments — fixed/flexible assessments' implicit batches
+        are reported on via the assessments/attempts reports instead, so
+        `expiry_date`/`duration_minutes` here are always null.
       allOf:
         - type: object
           properties:
@@ -874,6 +924,7 @@ components:
         batch_id:
           type: integer
           nullable: true
+          description: Null when the attempt's batch is a fixed/flexible assessment's implicit batch — see `AssessmentBatchScheduleFull.batch_id`.
         batch_name:
           type: string
           nullable: true
@@ -957,6 +1008,7 @@ components:
         batch_id:
           type: integer
           nullable: true
+          description: Null when the attempt's batch is a fixed/flexible assessment's implicit batch — see `AssessmentBatchScheduleFull.batch_id`.
         batch_name:
           type: string
           nullable: true
@@ -1001,6 +1053,7 @@ components:
         batch_id:
           type: integer
           nullable: true
+          description: Null when the attempt's batch is a fixed/flexible assessment's implicit batch — see `AssessmentBatchScheduleFull.batch_id`.
         question_id:
           type: integer
         question_text:
@@ -1036,6 +1089,7 @@ components:
         batch_id:
           type: integer
           nullable: true
+          description: Null when the attempt's batch is a fixed/flexible assessment's implicit batch — see `AssessmentBatchScheduleFull.batch_id`.
         attempt_date:
           type: string
           format: date
@@ -1067,6 +1121,7 @@ components:
         batch_id:
           type: integer
           nullable: true
+          description: Null for `fixed`/`flexible` assessments — see `AssessmentBatchScheduleFull.batch_id`.
         publish_date:
           type: string
           format: date
@@ -1079,15 +1134,21 @@ components:
           type: string
           nullable: true
           example: '10:30:00'
-        expiry_date:
+        start_date:
+          type: string
+          format: date
+          nullable: true
+        end_date:
           type: string
           format: date
           nullable: true
         duration_minutes:
           type: integer
           nullable: true
-        is_flexible:
-          type: boolean
+        scheduling_type:
+          type: string
+          enum: [batch_wise, fixed, flexible]
+          nullable: true
 
 security:
   - BearerAuth: []
@@ -1387,7 +1448,11 @@ paths:
     get:
       tags: [Admin Batches]
       summary: List all batches for the admin's assessments
-      description: Returns every batch belonging to an assessment owned by the authenticated admin, across all assessments. Requires admin authentication.
+      description: >-
+        Returns every batch belonging to a `batch_wise` assessment owned by
+        the authenticated admin, across all such assessments. Fixed/flexible
+        assessments' implicit batches are never included — see `Batch`.
+        Requires admin authentication.
       operationId: adminListBatches
       responses:
         '200':
@@ -1409,16 +1474,13 @@ paths:
       tags: [Admin Batches]
       summary: Create a batch for an assessment
       description: >-
-        Creates an additional scheduled instance of an assessment owned by the
-        authenticated admin. Rejected with `422` if its publish date and time
-        window overlap an existing batch of the same assessment. For a
-        **non-batch-wise** assessment, this also fails with `422` ("Default batch
-        exists") whenever the assessment's auto-created default batch already
-        exists — which it always does once the assessment itself has been
-        created — so in practice this endpoint is only useful for batch-wise
-        assessments; non-batch-wise assessments manage their single implicit
-        batch via the assessment's own create/update endpoints. Requires admin
-        authentication.
+        Creates a scheduled instance of a `batch_wise` assessment owned by the
+        authenticated admin — rejected with `422` if the target assessment's
+        scheduling_type isn't `batch_wise` (fixed/flexible assessments manage
+        their single implicit batch via the assessment's own create/update
+        endpoints instead, and never go through Batch CRUD). Also rejected
+        with `422` if its publish date and time window overlap an existing
+        batch of the same assessment. Requires admin authentication.
       operationId: adminCreateBatch
       requestBody:
         required: true
@@ -1470,10 +1532,10 @@ paths:
                 $ref: '#/components/schemas/Error'
         '422':
           description: >-
-            Validation failed, or a business rule was violated: overlapping batch
-            time window for the same assessment/date ("Batch time conflict"), or
-            the assessment is non-batch-wise and already has its default batch
-            ("Default batch exists").
+            Validation failed, or a business rule was violated: the target
+            assessment's scheduling_type isn't `batch_wise` ("Batches can only
+            be created for batch_wise assessments"), or an overlapping batch
+            time window for the same assessment/date ("Batch time conflict").
           content:
             application/json:
               schema:
@@ -1483,7 +1545,11 @@ paths:
     get:
       tags: [Admin Batches]
       summary: Get a single batch
-      description: Retrieve one batch, scoped to an assessment owned by the authenticated admin.
+      description: >-
+        Retrieve one batch, scoped to a `batch_wise` assessment owned by the
+        authenticated admin — `404` for any other batch ID, including a
+        fixed/flexible assessment's implicit batch (it's never exposed here,
+        even by ID — see `Batch`).
       operationId: adminGetBatch
       parameters:
         - name: id
@@ -1506,7 +1572,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
-          description: The batch does not exist or does not belong to an assessment owned by the authenticated admin.
+          description: >-
+            The batch does not exist, does not belong to an assessment owned
+            by the authenticated admin, or belongs to a non-batch_wise
+            assessment (its implicit batch is never exposed via Batch CRUD).
           content:
             application/json:
               schema:
@@ -1516,10 +1585,12 @@ paths:
       tags: [Admin Batches]
       summary: Update a batch
       description: >-
-        Partial update — omitted fields keep their current value. Locked (`403`)
-        once any attempt exists for this batch. The same time-overlap and
-        default-batch-name checks as create apply, evaluated against the
-        merged (existing + submitted) values. Requires admin authentication.
+        Partial update — omitted fields keep their current value. Only ever
+        targets a batch belonging to a `batch_wise` assessment (`404`
+        otherwise — see `GET /admin/batches/{id}`). Locked (`403`) once any
+        attempt exists for this batch. The same time-overlap check as create
+        applies, evaluated against the merged (existing + submitted) values.
+        Requires admin authentication.
       operationId: adminUpdateBatch
       parameters:
         - name: id
@@ -1574,17 +1645,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
-          description: The batch does not exist or does not belong to an assessment owned by the authenticated admin.
+          description: >-
+            The batch does not exist, does not belong to an assessment owned
+            by the authenticated admin, or belongs to a non-batch_wise
+            assessment (its implicit batch is never exposed via Batch CRUD).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '422':
           description: >-
-            Validation failed, or a business rule was violated: overlapping batch
-            time window ("Batch time conflict"), or renaming this batch to the
-            reserved default name while another batch already holds it
-            ("Default batch already exists for this assessment").
+            Validation failed, or an overlapping batch time window for the
+            same assessment/date ("Batch time conflict").
           content:
             application/json:
               schema:
@@ -1626,7 +1698,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
-          description: The batch does not exist or does not belong to an assessment owned by the authenticated admin.
+          description: >-
+            The batch does not exist, does not belong to an assessment owned
+            by the authenticated admin, or belongs to a non-batch_wise
+            assessment (its implicit batch is never exposed via Batch CRUD).
           content:
             application/json:
               schema:
@@ -1636,7 +1711,11 @@ paths:
     get:
       tags: [Admin Batches]
       summary: List the batches belonging to one assessment
-      description: Fetch all batches for a specific assessment owned by the authenticated admin.
+      description: >-
+        Fetch all batches for a `batch_wise` assessment owned by the
+        authenticated admin. Rejected with `422` for a fixed/flexible
+        assessment — its implicit batch is managed via the assessment's own
+        endpoints and never exposed here.
       operationId: adminListBatchesByAssessment
       parameters:
         - name: assessment_id
@@ -1666,6 +1745,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '422':
+          description: The assessment's scheduling_type isn't `batch_wise`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /admin/batches/{id}/users:
     get:
@@ -1673,11 +1758,12 @@ paths:
       summary: List users assigned to a batch
       description: >-
         Returns the users currently assigned to this batch. Like every other
-        batch endpoint, the batch must belong to an assessment owned by the
-        requesting admin (returns `404` otherwise) — an earlier version of
-        this endpoint skipped that check, allowing any authenticated admin to
-        look up any batch ID; that IDOR has been fixed. Requires admin
-        authentication.
+        batch endpoint, the batch must belong to a `batch_wise` assessment
+        owned by the requesting admin (returns `404` otherwise, including for
+        a fixed/flexible assessment's implicit batch) — an earlier version of
+        this endpoint skipped the ownership check, allowing any authenticated
+        admin to look up any batch ID; that IDOR has been fixed. Requires
+        admin authentication.
       operationId: adminListBatchUsers
       parameters:
         - name: id
@@ -1702,7 +1788,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
-          description: The batch does not exist or its assessment is not owned by the authenticated admin.
+          description: >-
+            The batch does not exist, does not belong to an assessment owned
+            by the authenticated admin, or belongs to a non-batch_wise
+            assessment (its implicit batch is never exposed via Batch CRUD).
           content:
             application/json:
               schema:
@@ -1781,7 +1870,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
-          description: The batch does not exist or does not belong to an assessment owned by the authenticated admin.
+          description: >-
+            The batch does not exist, does not belong to an assessment owned
+            by the authenticated admin, or belongs to a non-batch_wise
+            assessment (its implicit batch is never exposed via Batch CRUD).
           content:
             application/json:
               schema:
@@ -1847,7 +1939,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
-          description: The batch does not exist or does not belong to an assessment owned by the authenticated admin.
+          description: >-
+            The batch does not exist, does not belong to an assessment owned
+            by the authenticated admin, or belongs to a non-batch_wise
+            assessment (its implicit batch is never exposed via Batch CRUD).
           content:
             application/json:
               schema:
@@ -1889,16 +1984,22 @@ paths:
       summary: Create an assessment
       description: >-
         Creates a new assessment definition owned by the authenticated admin.
-        Scheduling mode is fixed at creation time and cannot be changed later:
-        exactly one of `is_batch_wise` / `is_flexible` may be true (both false is
-        allowed and means the assessment has a single fixed-schedule batch).
-        When neither flag is set, `publish_date`/`start_time`/`end_time` are
-        required to seed that single batch. When `is_flexible` is true,
-        `duration_minutes` is required. When `is_batch_wise` is false (including
-        the flexible case), a default batch named `individual_batch_{id}` is
-        auto-created immediately using the schedule fields from this request;
-        batch-wise assessments start with no batches — create them separately via
-        `POST /admin/batches`. Requires admin authentication.
+        Scheduling mode is fixed at creation time via `scheduling_type` and
+        cannot be changed later; each mode accepts only its own schedule
+        fields — supplying one that belongs to a different mode is rejected
+        with `422` (`prohibited_unless`), and every field required by the
+        chosen mode must be supplied together (`required_if`). When
+        `scheduling_type` is `fixed`, `publish_date`/`start_time`/`end_time`
+        are required (`start_date`/`end_date`/`duration_minutes` are
+        rejected). When `scheduling_type` is `flexible`,
+        `start_date`/`end_date`/`duration_minutes` are required
+        (`publish_date`/`start_time`/`end_time` are rejected). When
+        `scheduling_type` is `batch_wise`, none of the six schedule fields are
+        accepted at all. For `fixed` and `flexible`, a default batch named
+        `individual_batch_{id}` is auto-created immediately using the schedule
+        fields from this request — it is never exposed through Batch CRUD, see
+        `Batch`; `batch_wise` assessments start with no batches — create them
+        separately via `POST /admin/batches`. Requires admin authentication.
       operationId: adminCreateAssessment
       requestBody:
         required: true
@@ -1910,7 +2011,7 @@ paths:
                 - assessment_type_id
                 - title
                 - difficulty_level
-                - is_batch_wise
+                - scheduling_type
               properties:
                 assessment_type_id:
                   type: integer
@@ -1958,46 +2059,52 @@ paths:
                   description: Optional. Minimum 0. Marks deducted per wrong MCQ answer when `has_negative` is true.
                   example: 0.5
 
-                is_batch_wise:
-                  type: boolean
-                  description: Required. See `Assessment.is_batch_wise`. Cannot be true at the same time as `is_flexible`.
-                  example: false
-
-                is_flexible:
-                  type: boolean
-                  description: Optional (defaults false). See `Assessment.is_flexible`. Cannot be true at the same time as `is_batch_wise`.
-                  example: false
+                scheduling_type:
+                  type: string
+                  enum: [batch_wise, fixed, flexible]
+                  description: Required. See `Assessment.scheduling_type`. Immutable after creation.
+                  example: fixed
 
                 publish_date:
                   type: string
                   format: date
                   nullable: true
-                  description: Required (unless `is_batch_wise` or `is_flexible` is true). Date the default batch opens.
+                  description: Required when `scheduling_type` is `fixed` (prohibited otherwise). Date the default batch opens.
                   example: "2026-01-30"
 
                 start_time:
                   type: string
                   example: "10:00:00"
                   nullable: true
-                  description: Required (unless `is_batch_wise` or `is_flexible` is true). Format `H:i:s`.
+                  description: Required when `scheduling_type` is `fixed` (prohibited otherwise). Format `H:i:s`.
 
                 end_time:
                   type: string
                   example: "11:00:00"
                   nullable: true
-                  description: Required (unless `is_batch_wise` or `is_flexible` is true). Format `H:i:s`.
+                  description: Required when `scheduling_type` is `fixed` (prohibited otherwise). Format `H:i:s`. Must be after `start_time`.
 
-                expiry_date:
+                start_date:
                   type: string
                   format: date
                   nullable: true
-                  description: Optional. Only meaningful when `is_flexible` is true — last day the default batch can be attempted.
-                  example: "2026-02-05"
+                  description: Required when `scheduling_type` is `flexible` (prohibited otherwise). First day the assessment can be attempted.
+                  example: "2026-02-01"
+
+                end_date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: Required when `scheduling_type` is `flexible` (prohibited otherwise). Last day the assessment can be attempted. Must be on or after `start_date`.
+                  example: "2026-02-28"
 
                 duration_minutes:
                   type: integer
                   nullable: true
-                  description: Required when `is_flexible` is true. Minimum 1. Per-attempt time limit on the default batch.
+                  description: >-
+                    Required when `scheduling_type` is `flexible` (prohibited
+                    otherwise). Minimum 1. Per-attempt time limit, capped so an
+                    attempt can never run past `end_date`.
                   example: 60
 
       responses:
@@ -2021,10 +2128,10 @@ paths:
                 $ref: '#/components/schemas/Error'
         '422':
           description: >-
-            Validation failed, or a scheduling business rule was violated:
-            both `is_batch_wise` and `is_flexible` true, missing
-            publish/start/end time for fixed-schedule assessments, or missing
-            `duration_minutes` for flexible assessments.
+            Validation failed — an invalid `scheduling_type`, a schedule field
+            that doesn't belong to the chosen scheduling_type, a schedule
+            field missing for the chosen scheduling_type, or `end_time`/
+            `end_date` not after/on-or-after `start_time`/`start_date`.
           content:
             application/json:
               schema:
@@ -2075,11 +2182,16 @@ paths:
       summary: Update an assessment
       description: >-
         Partial update — omitted fields keep their current value. Locked
-        (`403`) once any attempt exists for this assessment. `is_batch_wise` and
-        `is_flexible` cannot be changed from their original value (`422` if a
-        different value is supplied); the required-schedule-fields rule from
-        create is re-checked against the merged values whenever the corresponding
-        field is explicitly included in the request. Requires admin authentication.
+        (`403`) once any attempt exists for this assessment. `scheduling_type`
+        cannot be changed from its original value (`422` if a different value
+        is supplied); the six schedule fields keep obeying the same
+        `prohibited_unless` rule as create, evaluated against the assessment's
+        (immutable) current scheduling_type — supplying one from a different
+        mode is rejected with `422` even though scheduling_type itself is
+        omitted from the request. The required-fields rule from create is
+        re-checked against the merged values whenever a schedule field for the
+        current mode is explicitly included and cleared. Requires admin
+        authentication.
       operationId: adminUpdateAssessment
       parameters:
         - name: id
@@ -2143,46 +2255,68 @@ paths:
                   description: Optional. Minimum 0.
                   example: 0.5
 
-                is_batch_wise:
-                  type: boolean
+                scheduling_type:
+                  type: string
+                  enum: [batch_wise, fixed, flexible]
                   description: Optional, but the value must match the assessment's current value — changing it returns `422`.
-                  example: false
-
-                is_flexible:
-                  type: boolean
-                  description: Optional, but the value must match the assessment's current value — changing it returns `422`.
-                  example: false
+                  example: fixed
 
                 publish_date:
                   type: string
                   format: date
                   nullable: true
-                  description: Optional. Updates the default batch's publish date (non-batch-wise assessments only).
+                  description: >-
+                    Only accepted while the assessment's scheduling_type is
+                    `fixed` (`422` otherwise). Updates the implicit batch's
+                    publish date. Cannot be explicitly cleared.
                   example: "2026-01-30"
 
                 start_time:
                   type: string
                   nullable: true
                   example: "10:00:00"
-                  description: Optional. Format `H:i:s`. Updates the default batch's start time (non-batch-wise assessments only).
+                  description: >-
+                    Only accepted while scheduling_type is `fixed` (`422`
+                    otherwise). Format `H:i:s`. Updates the implicit batch's
+                    start time. Cannot be explicitly cleared.
 
                 end_time:
                   type: string
                   nullable: true
                   example: "11:00:00"
-                  description: Optional. Format `H:i:s`. Updates the default batch's end time (non-batch-wise assessments only).
+                  description: >-
+                    Only accepted while scheduling_type is `fixed` (`422`
+                    otherwise). Format `H:i:s`, must stay after the effective
+                    `start_time`. Updates the implicit batch's end time.
+                    Cannot be explicitly cleared.
 
-                expiry_date:
+                start_date:
                   type: string
                   format: date
                   nullable: true
-                  description: Optional. Updates the default batch's expiry date (non-batch-wise, flexible assessments only).
-                  example: "2026-02-05"
+                  description: >-
+                    Only accepted while scheduling_type is `flexible` (`422`
+                    otherwise). Updates the implicit batch's start of the
+                    allowed date range. Cannot be explicitly cleared.
+                  example: "2026-02-01"
+
+                end_date:
+                  type: string
+                  format: date
+                  nullable: true
+                  description: >-
+                    Only accepted while scheduling_type is `flexible` (`422`
+                    otherwise), must stay on or after the effective
+                    `start_date`. Updates the implicit batch's end of the
+                    allowed date range. Cannot be explicitly cleared.
+                  example: "2026-02-28"
 
                 duration_minutes:
                   type: integer
                   nullable: true
-                  description: Optional. Minimum 1. Cannot be explicitly cleared while `is_flexible` is true.
+                  description: >-
+                    Only accepted while scheduling_type is `flexible` (`422`
+                    otherwise). Minimum 1. Cannot be explicitly cleared.
                   example: 60
 
       responses:
@@ -2218,8 +2352,10 @@ paths:
                 $ref: '#/components/schemas/Error'
         '422':
           description: >-
-            Validation failed, an attempt to change `is_batch_wise`/`is_flexible`,
-            or a required schedule field was cleared for the assessment's scheduling mode.
+            Validation failed (including a schedule field that doesn't belong
+            to the assessment's scheduling_type), an attempt to change
+            `scheduling_type`, or a required schedule field was cleared for
+            the assessment's scheduling mode.
           content:
             application/json:
               schema:
@@ -2319,10 +2455,10 @@ paths:
       tags: [Admin Assessments]
       summary: List currently running assessments
       description: >-
-        Active assessments with a batch currently open: for non-flexible batches,
-        today is the publish date and the current time is within
-        `start_time`–`end_time`; for flexible batches, the `expiry_date` has not
-        passed (or is unset).
+        Active assessments with a batch currently open: for `fixed`/`batch_wise`
+        batches, today is the publish date and the current time is within
+        `start_time`–`end_time`; for `flexible` batches, today falls within
+        `[start_date, end_date]`.
       operationId: adminListRunningAssessments
       responses:
         '200':
@@ -3460,6 +3596,7 @@ paths:
                   batch_id:
                     type: integer
                     nullable: true
+                    description: Null when resolved to a fixed/flexible assessment's implicit batch — see `AssessmentBatchScheduleFull.batch_id`.
                   user_id:
                     type: integer
                   score:
@@ -3575,6 +3712,7 @@ paths:
                   batch_id:
                     type: integer
                     nullable: true
+                    description: Null when resolved to a fixed/flexible assessment's implicit batch — see `AssessmentBatchScheduleFull.batch_id`.
                   user_id:
                     type: integer
                   questions:
@@ -3764,6 +3902,7 @@ paths:
                   batch_id:
                     type: integer
                     nullable: true
+                    description: Null when resolved to a fixed/flexible assessment's implicit batch — see `AssessmentBatchScheduleFull.batch_id`.
                   rank_list:
                     type: array
                     items:
@@ -4165,6 +4304,7 @@ paths:
                         batch_id:
                           type: integer
                           nullable: true
+                          description: Null when the attempt's batch is a fixed/flexible assessment's implicit batch — see `AssessmentBatchScheduleFull.batch_id`.
                         user_id:
                           type: integer
                         user_name:
@@ -4208,6 +4348,7 @@ paths:
                         batch_id:
                           type: integer
                           nullable: true
+                          description: Null when the attempt's batch is a fixed/flexible assessment's implicit batch — see `AssessmentBatchScheduleFull.batch_id`.
                         user_id:
                           type: integer
                         user_name:
@@ -4367,7 +4508,10 @@ paths:
     get:
       tags: [Admin Reports]
       summary: One row per batch, with participation and schedule status
-      description: Requires admin authentication. Every filter is optional and combines.
+      description: >-
+        Requires admin authentication. Every filter is optional and combines.
+        Only reports on batches belonging to `batch_wise` assessments — see
+        `AdminReportBatchRow`.
       operationId: adminReportBatches
       parameters:
         - $ref: '#/components/parameters/ReportAssessmentId'
@@ -5475,6 +5619,7 @@ paths:
                         batch_id:
                           type: integer
                           nullable: true
+                          description: Null when the attempt's batch is a fixed/flexible assessment's implicit batch — see `AssessmentBatchScheduleFull.batch_id`.
                         submitted_at:
                           type: string
                           example: '18:36:09'
@@ -5508,6 +5653,7 @@ paths:
                         batch_id:
                           type: integer
                           nullable: true
+                          description: Null when the attempt's batch is a fixed/flexible assessment's implicit batch — see `AssessmentBatchScheduleFull.batch_id`.
                         submitted_at:
                           type: string
                           example: '18:36:09'

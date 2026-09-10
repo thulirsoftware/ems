@@ -85,24 +85,15 @@ class UserAnswerController extends Controller
         $today = app_now()->toDateString();
         $nowTime = app_now()->toTimeString();
 
-        if ($assessment->is_flexible) {
+        if ($assessment->scheduling_type === Assessment::SCHEDULING_FLEXIBLE) {
 
-            if ($batch->duration_minutes) {
-
-                // started_at only stores a time-of-day, not the date, so the
-                // attempt's created_at (a full timestamp) is the reliable
-                // source of when the attempt actually began.
-                $expiresAt = $attempt->created_at
-                    ->copy()
-                    ->addMinutes(
-                        $batch->duration_minutes
-                    );
-
-                if (app_now()->gt($expiresAt)) {
-                    return response()->json([
-                        'message' => 'Assessment time expired'
-                    ], 403);
-                }
+            // Capped at end_date so an attempt started near the end of the
+            // allowed date range can't run past it, even if duration_minutes
+            // would otherwise carry it further.
+            if (app_now()->gt(flexible_attempt_deadline($attempt, $batch))) {
+                return response()->json([
+                    'message' => 'Assessment time expired'
+                ], 403);
             }
 
         } else {

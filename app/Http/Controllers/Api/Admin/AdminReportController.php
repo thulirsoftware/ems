@@ -60,7 +60,7 @@ class AdminReportController extends Controller
         $query = AssessmentAttempt::whereIn('assessment_id', $assessmentIds);
 
         if ($withRelations) {
-            $query->with(['user:id,name,email', 'assessment:id,title']);
+            $query->with(['user:id,name,email', 'assessment:id,title,scheduling_type']);
         }
 
         if (!empty($validated['batch_id'])) {
@@ -195,8 +195,7 @@ class AdminReportController extends Controller
                 'type' => $assessment->type?->slug,
                 'difficulty_level' => $assessment->difficulty_level,
                 'is_active' => (bool) $assessment->is_active,
-                'is_batch_wise' => (bool) $assessment->is_batch_wise,
-                'is_flexible' => (bool) $assessment->is_flexible,
+                'scheduling_type' => $assessment->scheduling_type,
 
                 'questions' => (int) ($questionCounts[$assessment->id] ?? 0),
                 'batches' => (int) ($batchCounts[$assessment->id] ?? 0),
@@ -233,7 +232,12 @@ class AdminReportController extends Controller
         $assessmentIds = $assessments->pluck('id');
         $assessmentsById = $assessments->keyBy('id');
 
-        $batchQuery = Batch::whereIn('assessment_id', $assessmentIds);
+        // This report lists real Batch records (batch_id/batch_name as the
+        // row subject), so — like Batch CRUD — it only ever surfaces batches
+        // belonging to batch_wise assessments; fixed/flexible assessments'
+        // implicit batches stay internal and are reported on via the
+        // assessments/attempts reports instead.
+        $batchQuery = Batch::whereIn('assessment_id', $assessmentIds)->batchWiseOnly();
 
         if (!empty($validated['batch_id'])) {
             $batchQuery->where('id', $validated['batch_id']);
@@ -431,13 +435,15 @@ class AdminReportController extends Controller
 
             $result = attempt_result($attempt);
             $percentage = $result['percentage'] ?? null;
+            $batch = $batches->get($attempt->batch_id);
+            $hideBatch = is_implicit_batch($attempt->assessment, $batch);
 
             return [
                 'attempt_id' => $attempt->id,
                 'assessment_id' => $attempt->assessment_id,
                 'assessment_title' => $attempt->assessment?->title,
-                'batch_id' => $attempt->batch_id,
-                'batch_name' => $batches->get($attempt->batch_id)?->name,
+                'batch_id' => $hideBatch ? null : $attempt->batch_id,
+                'batch_name' => $hideBatch ? null : $batch?->name,
                 'user_id' => $attempt->user_id,
                 'user_name' => $attempt->user?->name,
                 'user_email' => $attempt->user?->email,

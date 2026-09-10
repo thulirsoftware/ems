@@ -49,7 +49,7 @@ class AssessmentAssignmentController extends Controller
         // Fetch every conflict in one query instead of one query per user.
         $conflictsByUser = collect();
 
-        if (!$assessment->is_flexible) {
+        if ($assessment->scheduling_type !== Assessment::SCHEDULING_FLEXIBLE) {
             $conflictsByUser = DB::table('assessment_assignments as aa')
                 ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
                 ->join('batches as b', 'b.id', '=', 'aa.batch_id')
@@ -120,7 +120,7 @@ class AssessmentAssignmentController extends Controller
 
             $conflict = null;
 
-            if (!$assessment->is_flexible) {
+            if ($assessment->scheduling_type !== Assessment::SCHEDULING_FLEXIBLE) {
 
                 $conflict = DB::table('assessment_assignments as aa')
                     ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
@@ -190,9 +190,14 @@ class AssessmentAssignmentController extends Controller
             $assignments[] = $assignment;
         }
 
+        $hideBatch = is_implicit_batch($assessment, $batch);
+
         return response()->json([
             'message' => 'Assignment completed',
-            'assigned' => $assignments,
+            'assigned' => collect($assignments)->map(fn($assignment) => [
+                ...$assignment->toArray(),
+                'batch_id' => $hideBatch ? null : $assignment->batch_id,
+            ]),
             'blocked_due_to_conflict' => $conflicts,
         ], 201);
     }

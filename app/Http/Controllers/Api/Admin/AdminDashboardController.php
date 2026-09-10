@@ -23,8 +23,8 @@ class AdminDashboardController extends Controller
             'total' => $assessments->count(),
             'active' => $assessments->where('is_active', true)->count(),
             'library' => $assessments->where('is_library', true)->count(),
-            'batch_wise' => $assessments->where('is_batch_wise', true)->count(),
-            'flexible' => $assessments->where('is_flexible', true)->count(),
+            'batch_wise' => $assessments->where('scheduling_type', Assessment::SCHEDULING_BATCH_WISE)->count(),
+            'flexible' => $assessments->where('scheduling_type', Assessment::SCHEDULING_FLEXIBLE)->count(),
             'by_type' => $byType,
         ];
     }
@@ -100,7 +100,9 @@ class AdminDashboardController extends Controller
             ->values();
     }
 
-    // Next scheduled batches, soonest first
+    // Next scheduled batches, soonest first. A real batch listing (batch_id
+    // + batch_name as the row subject), so — like Batch CRUD — it's scoped
+    // to batch_wise assessments only; implicit batches stay internal.
     private function upcomingBatches($assessments, $batches, $today, $nowTime, $limit)
     {
         return $batches
@@ -108,7 +110,7 @@ class AdminDashboardController extends Controller
 
                 $assessment = $assessments->get($batch->assessment_id);
 
-                if (!$assessment) {
+                if (!$assessment || $assessment->scheduling_type !== Assessment::SCHEDULING_BATCH_WISE) {
                     return null;
                 }
 
@@ -135,12 +137,12 @@ class AdminDashboardController extends Controller
     }
 
     // Latest attempts across every owned assessment
-    private function recentAttempts($attempts, $limit)
+    private function recentAttempts($attempts, $batchesById, $limit)
     {
         return $attempts
             ->sortByDesc('id')
             ->take($limit)
-            ->map(function ($attempt) {
+            ->map(function ($attempt) use ($batchesById) {
 
                 $result = attempt_result($attempt);
 
@@ -148,7 +150,9 @@ class AdminDashboardController extends Controller
                     'attempt_id' => $attempt->id,
                     'assessment_id' => $attempt->assessment_id,
                     'assessment_title' => $attempt->assessment?->title,
-                    'batch_id' => $attempt->batch_id,
+                    'batch_id' => is_implicit_batch($attempt->assessment, $batchesById->get($attempt->batch_id))
+                        ? null
+                        : $attempt->batch_id,
                     'user_id' => $attempt->user_id,
                     'user_name' => $attempt->user?->name,
                     'started_at' => $attempt->started_at,
@@ -165,7 +169,7 @@ class AdminDashboardController extends Controller
     }
 
     // Submitted attempts still waiting on manual grading
-    private function pendingEvaluations($submitted, $limit)
+    private function pendingEvaluations($submitted, $batchesById, $limit)
     {
         return $submitted
             ->where('score', 'Pending Evaluation')
@@ -175,7 +179,9 @@ class AdminDashboardController extends Controller
                 'attempt_id' => $attempt->id,
                 'assessment_id' => $attempt->assessment_id,
                 'assessment_title' => $attempt->assessment?->title,
-                'batch_id' => $attempt->batch_id,
+                'batch_id' => is_implicit_batch($attempt->assessment, $batchesById->get($attempt->batch_id))
+                    ? null
+                    : $attempt->batch_id,
                 'user_id' => $attempt->user_id,
                 'user_name' => $attempt->user?->name,
                 'submitted_at' => $attempt->submitted_at,
@@ -201,8 +207,10 @@ class AdminDashboardController extends Controller
         $batches = Batch::whereIn('assessment_id', $assessmentIds)->get();
 
         $attempts = AssessmentAttempt::whereIn('assessment_id', $assessmentIds)
-            ->with(['user:id,name', 'assessment:id,title'])
+            ->with(['user:id,name', 'assessment:id,title,scheduling_type'])
             ->get();
+
+        $batchesById = $batches->keyBy('id');
 
         $submitted = $attempts->filter(fn($attempt) => $attempt->submitted_at !== null);
 
@@ -239,8 +247,8 @@ class AdminDashboardController extends Controller
             'score_distribution' => bucket_percentages($percentages),
             'top_performers' => $this->topPerformers($submitted, $limit),
             'upcoming_batches' => $this->upcomingBatches($assessmentsById, $batches, $today, $nowTime, $limit),
-            'recent_attempts' => $this->recentAttempts($attempts, $limit),
-            'pending_evaluations' => $this->pendingEvaluations($submitted, $limit),
+            'recent_attempts' => $this->recentAttempts($attempts, $batchesById, $limit),
+            'pending_evaluations' => $this->pendingEvaluations($submitted, $batchesById, $limit),
         ]);
     }
 }

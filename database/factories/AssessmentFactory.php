@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Admin;
+use App\Models\Assessment;
 use App\Models\AssessmentType;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -24,8 +25,7 @@ class AssessmentFactory extends Factory
             'is_library' => false,
             'has_negative' => false,
             'negative_marks' => 0,
-            'is_batch_wise' => false,
-            'is_flexible' => false,
+            'scheduling_type' => Assessment::SCHEDULING_FIXED,
         ];
     }
 
@@ -42,16 +42,14 @@ class AssessmentFactory extends Factory
     public function batchWise(): static
     {
         return $this->state([
-            'is_batch_wise' => true,
-            'is_flexible' => false,
+            'scheduling_type' => Assessment::SCHEDULING_BATCH_WISE,
         ]);
     }
 
     public function flexible(): static
     {
         return $this->state([
-            'is_batch_wise' => false,
-            'is_flexible' => true,
+            'scheduling_type' => Assessment::SCHEDULING_FLEXIBLE,
         ]);
     }
 

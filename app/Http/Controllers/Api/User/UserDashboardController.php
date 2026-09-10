@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\User;
 
 use App\Http\Controllers\Controller;
+use App\Models\Assessment;
 use App\Models\AssessmentAssignment;
 use App\Models\AssessmentAttempt;
 use App\Models\Batch;
@@ -42,7 +43,7 @@ class UserDashboardController extends Controller
     private function loadAttempts($userId)
     {
         return AssessmentAttempt::where('user_id', $userId)
-            ->with('assessment:id,title')
+            ->with('assessment:id,title,scheduling_type')
             ->get()
             ->keyBy(fn($attempt) => $this->attemptKey(
                 $attempt->assessment_id,
@@ -65,7 +66,11 @@ class UserDashboardController extends Controller
             return 'unscheduled';
         }
 
-        if ($assessment->is_flexible) {
+        if ($assessment->scheduling_type === Assessment::SCHEDULING_FLEXIBLE) {
+
+            if ($batch->publish_date && $batch->publish_date > $today) {
+                return 'upcoming';
+            }
 
             return !$batch->expiry_date || $batch->expiry_date >= $today
                 ? 'available'
@@ -169,24 +174,19 @@ class UserDashboardController extends Controller
             ->map(fn($row) => [
                 'assessment_id' => $row['assessment']?->id,
                 'assessment_title' => $row['assessment']?->title,
-                'batch_id' => $row['batch']?->id,
-                'publish_date' => $row['batch']?->publish_date,
-                'start_time' => $row['batch']?->start_time,
-                'end_time' => $row['batch']?->end_time,
-                'expiry_date' => $row['batch']?->expiry_date,
-                'duration_minutes' => $row['batch']?->duration_minutes,
-                'is_flexible' => (bool) $row['assessment']?->is_flexible,
+                'scheduling_type' => $row['assessment']?->scheduling_type,
+                ...batch_schedule_fields($row['assessment'], $row['batch']),
             ])
             ->values();
     }
 
     // Latest submitted attempts with their outcome
-    private function recentResults($submitted, $limit)
+    private function recentResults($submitted, $batches, $limit)
     {
         return $submitted
             ->sortByDesc('id')
             ->take($limit)
-            ->map(function ($attempt) {
+            ->map(function ($attempt) use ($batches) {
 
                 $result = attempt_result($attempt);
 
@@ -194,7 +194,9 @@ class UserDashboardController extends Controller
                     'attempt_id' => $attempt->id,
                     'assessment_id' => $attempt->assessment_id,
                     'assessment_title' => $attempt->assessment?->title,
-                    'batch_id' => $attempt->batch_id,
+                    'batch_id' => is_implicit_batch($attempt->assessment, $batches->get($attempt->batch_id))
+                        ? null
+                        : $attempt->batch_id,
                     'submitted_at' => $attempt->submitted_at,
                     'status' => $result ? 'evaluated' : 'pending_evaluation',
                     'score' => $result['score'] ?? null,
@@ -206,11 +208,11 @@ class UserDashboardController extends Controller
     }
 
     // Evaluated attempts oldest first, for a progress chart
-    private function performance($submitted)
+    private function performance($submitted, $batches)
     {
         return $submitted
             ->sortBy('id')
-            ->map(function ($attempt) {
+            ->map(function ($attempt) use ($batches) {
 
                 $result = attempt_result($attempt);
 
@@ -222,7 +224,9 @@ class UserDashboardController extends Controller
                     'attempt_id' => $attempt->id,
                     'assessment_id' => $attempt->assessment_id,
                     'assessment_title' => $attempt->assessment?->title,
-                    'batch_id' => $attempt->batch_id,
+                    'batch_id' => is_implicit_batch($attempt->assessment, $batches->get($attempt->batch_id))
+                        ? null
+                        : $attempt->batch_id,
                     'submitted_at' => $attempt->submitted_at,
                     'score' => $result['score'],
                     'total_marks' => $result['total'],
@@ -242,8 +246,8 @@ class UserDashboardController extends Controller
         $limit = resolve_limit($request);
 
         $assignments = $this->loadAssignments($user->id);
-        $batches = $this->getBatchesMap($assignments);
         $attempts = $this->loadAttempts($user->id);
+        $batches = $this->getBatchesMap($assignments->concat($attempts));
 
         $rows = $this->buildRows($assignments, $batches, $attempts, $today, $nowTime);
 
@@ -262,8 +266,8 @@ class UserDashboardController extends Controller
             'upcoming' => $this->actionable($rows, 'upcoming', $limit),
             'in_progress' => $this->actionable($rows, 'in_progress', $limit),
 
-            'recent_results' => $this->recentResults($submitted, $limit),
-            'performance' => $this->performance($submitted),
+            'recent_results' => $this->recentResults($submitted, $batches, $limit),
+            'performance' => $this->performance($submitted, $batches),
         ]);
     }
 }

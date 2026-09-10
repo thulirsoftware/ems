@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Assessment;
+
 // Shared helpers for the dashboard and report endpoints.
 // Extracted verbatim from the private copies that previously lived in
 // AdminDashboardController, AdminReportController, UserDashboardController
@@ -61,8 +63,13 @@ if (!function_exists('batch_status')) {
     // called.
     function batch_status($assessment, $batch, $today, $nowTime)
     {
-        if ($assessment->is_flexible) {
-            return !$batch->expiry_date || $batch->expiry_date >= $today
+        if ($assessment->scheduling_type === Assessment::SCHEDULING_FLEXIBLE) {
+
+            if ($batch->publish_date && $batch->publish_date > $today) {
+                return 'upcoming';
+            }
+
+            return (!$batch->expiry_date || $batch->expiry_date >= $today)
                 ? 'running'
                 : 'finished';
         }
@@ -84,6 +91,68 @@ if (!function_exists('batch_status')) {
         }
 
         return 'running';
+    }
+}
+
+if (!function_exists('is_implicit_batch')) {
+    // The single default batch every fixed/flexible assessment gets at
+    // creation (AssessmentController::store()), named individual_batch_{id}.
+    // It is never a manageable/addressable batch entity — unlike a batch_wise
+    // batch, or a later re-exam batch (a real, distinctly-named, deliberately
+    // created batch that admins do need to reference), it must never surface
+    // its id/name anywhere. Detected by the same name convention the rest of
+    // the app already uses to find it (e.g. ReExamController's source-batch
+    // lookup for non-batch-wise assessments).
+    function is_implicit_batch($assessment, $batch)
+    {
+        return $assessment
+            && $batch
+            && $assessment->scheduling_type !== Assessment::SCHEDULING_BATCH_WISE
+            && $batch->name === 'individual_batch_' . $assessment->id;
+    }
+}
+
+if (!function_exists('batch_schedule_fields')) {
+    // Flatten a batch's schedule onto the shape the Assessment APIs expose,
+    // per scheduling_type: fixed/batch_wise batches carry real
+    // publish_date/start_time/end_time; flexible batches carry a date range
+    // (start_date/end_date, backed by the same publish_date/expiry_date
+    // columns) plus duration_minutes instead. Every key is always present so
+    // list rows have a uniform shape regardless of scheduling_type. batch_id
+    // is omitted for the implicit batch — see is_implicit_batch().
+    function batch_schedule_fields($assessment, $batch)
+    {
+        $fields = [
+            'batch_id' => null,
+            'publish_date' => null,
+            'start_time' => null,
+            'end_time' => null,
+            'start_date' => null,
+            'end_date' => null,
+            'duration_minutes' => null,
+        ];
+
+        if (!$batch || !$assessment) {
+            return $fields;
+        }
+
+        if (!is_implicit_batch($assessment, $batch)) {
+            $fields['batch_id'] = $batch->id;
+        }
+
+        if ($assessment->scheduling_type === Assessment::SCHEDULING_FLEXIBLE) {
+            $fields['start_date'] = $batch->publish_date;
+            $fields['end_date'] = $batch->expiry_date;
+            $fields['duration_minutes'] = $batch->duration_minutes;
+
+            return $fields;
+        }
+
+        $fields['publish_date'] = $batch->publish_date;
+        $fields['start_time'] = $batch->start_time;
+        $fields['end_time'] = $batch->end_time;
+
+        return $fields;
     }
 }
 

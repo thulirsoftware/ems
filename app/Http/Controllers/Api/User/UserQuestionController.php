@@ -44,26 +44,12 @@ class UserQuestionController extends Controller
 
         $isRunning = false;
 
-        if ($assessment->is_flexible) {
+        if ($assessment->scheduling_type === Assessment::SCHEDULING_FLEXIBLE) {
 
-            if ($batch->duration_minutes) {
-
-                // started_at only stores a time-of-day, not the date, so the
-                // attempt's created_at (a full timestamp) is the reliable
-                // source of when the attempt actually began.
-                $expiresAt = $attempt->created_at
-                    ->copy()
-                    ->addMinutes(
-                        $batch->duration_minutes
-                    );
-
-                $isRunning =
-                    app_now()->lte($expiresAt);
-
-            } else {
-
-                $isRunning = true;
-            }
+            // Capped at end_date so an attempt started near the end of the
+            // allowed date range can't run past it, even if duration_minutes
+            // would otherwise carry it further.
+            $isRunning = app_now()->lte(flexible_attempt_deadline($attempt, $batch));
 
         } else {
 

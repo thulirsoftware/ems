@@ -26,6 +26,17 @@ class Batch extends Model
         return $this->belongsTo(Assessment::class);
     }
 
+    // Batches explicitly created via Batch CRUD, for batch_wise assessments
+    // only. Fixed/flexible assessments manage their single implicit batch
+    // through the Assessment APIs instead, so it's excluded here.
+    public function scopeBatchWiseOnly($query)
+    {
+        return $query->whereHas(
+            'assessment',
+            fn($q) => $q->where('scheduling_type', Assessment::SCHEDULING_BATCH_WISE)
+        );
+    }
+
     // Batch → Assignments
     public function assignments()
     {

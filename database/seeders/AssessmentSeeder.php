@@ -30,8 +30,7 @@ class AssessmentSeeder extends Seeder
             'is_library' => true,
             'has_negative' => false,
             'negative_marks' => 0,
-            'is_batch_wise' => false,
-            'is_flexible' => false,
+            'scheduling_type' => Assessment::SCHEDULING_FIXED,
         ]);
 
         // Batch-wise mcq assessment with negative marking (multiple batches).
@@ -46,8 +45,7 @@ class AssessmentSeeder extends Seeder
             'is_library' => false,
             'has_negative' => true,
             'negative_marks' => 0.25,
-            'is_batch_wise' => true,
-            'is_flexible' => false,
+            'scheduling_type' => Assessment::SCHEDULING_BATCH_WISE,
         ]);
 
         // Fixed-schedule descriptive assessment (manual grading).
@@ -62,8 +60,7 @@ class AssessmentSeeder extends Seeder
             'is_library' => false,
             'has_negative' => false,
             'negative_marks' => 0,
-            'is_batch_wise' => false,
-            'is_flexible' => false,
+            'scheduling_type' => Assessment::SCHEDULING_FIXED,
         ]);
 
         // Flexible mcq assessment: available anytime before expiry, timed per attempt.
@@ -78,8 +75,7 @@ class AssessmentSeeder extends Seeder
             'is_library' => true,
             'has_negative' => false,
             'negative_marks' => 0,
-            'is_batch_wise' => false,
-            'is_flexible' => true,
+            'scheduling_type' => Assessment::SCHEDULING_FLEXIBLE,
         ]);
 
         // Draft descriptive assessment, not yet published to students.
@@ -94,8 +90,7 @@ class AssessmentSeeder extends Seeder
             'is_library' => false,
             'has_negative' => false,
             'negative_marks' => 0,
-            'is_batch_wise' => false,
-            'is_flexible' => false,
+            'scheduling_type' => Assessment::SCHEDULING_FIXED,
         ]);
 
         // Batch-wise case study assessment.
@@ -110,8 +105,7 @@ class AssessmentSeeder extends Seeder
             'is_library' => false,
             'has_negative' => false,
             'negative_marks' => 0,
-            'is_batch_wise' => true,
-            'is_flexible' => false,
+            'scheduling_type' => Assessment::SCHEDULING_BATCH_WISE,
         ]);
 
         // Extra library assessments for pagination/browsing (no questions needed).
@@ -121,8 +115,7 @@ class AssessmentSeeder extends Seeder
             ->create([
                 'admin_id' => $admin3->id,
                 'assessment_type_id' => $mcq->id,
-                'is_batch_wise' => false,
-                'is_flexible' => false,
+                'scheduling_type' => Assessment::SCHEDULING_FIXED,
             ]);
     }
 }

@@ -1,6 +1,7 @@
 <?php
 
 use Carbon\Carbon;
+use App\Models\Assessment;
 use App\Models\Batch;
 
 if (!function_exists('app_now')) {
@@ -14,7 +15,7 @@ if (!function_exists('resolve_batch')) {
     function resolve_batch($assessment, $batchId = null)
     {
         // batch-wise → require batch_id
-        if ($assessment->is_batch_wise) {
+        if ($assessment->scheduling_type === Assessment::SCHEDULING_BATCH_WISE) {
 
             if (!$batchId) {
                 return [
@@ -52,5 +53,24 @@ if (!function_exists('resolve_batch')) {
         }
 
         return ['batch' => $batch];
+    }
+}
+
+if (!function_exists('flexible_attempt_deadline')) {
+    // The latest moment a flexible attempt may still be worked on: whichever
+    // comes first between the per-attempt time limit (duration_minutes from
+    // when it started) and the end of the assessment's allowed date range
+    // (end_date), so an attempt started near end_date can't run past it.
+    function flexible_attempt_deadline($attempt, $batch)
+    {
+        $deadline = $attempt->created_at->copy()->addMinutes($batch->duration_minutes);
+
+        if (!$batch->expiry_date) {
+            return $deadline;
+        }
+
+        $windowEnd = Carbon::parse($batch->expiry_date, config('app.timezone'))->endOfDay();
+
+        return $deadline->lt($windowEnd) ? $deadline : $windowEnd;
     }
 }
