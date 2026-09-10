@@ -39,13 +39,16 @@ function toSummaryCards(summary) {
     { title: "Students", value: summary.totals.candidates, color: "indigo" },
     { title: "Assessments", value: summary.totals.assessments, color: "emerald" },
     { title: "Batches", value: summary.totals.batches, color: "sky" },
+    { title: "Questions", value: summary.totals.questions, color: "teal" },
     { title: "Assignments", value: summary.totals.assignments, color: "violet" },
     { title: "Attempts", value: summary.attempts.total, color: "orange" },
     { title: "Completed", value: summary.attempts.submitted, color: "green" },
+    { title: "Pending Evaluation", value: summary.attempts.pending_evaluation, color: "amber" },
     { title: "Completion %", value: `${summary.participation.participation_rate}%`, color: "cyan" },
     { title: "Average Score", value: `${summary.performance.average_percentage}%`, color: "amber" },
     { title: "Highest Score", value: `${summary.performance.highest_percentage}%`, color: "rose" },
     { title: "Lowest Score", value: `${summary.performance.lowest_percentage}%`, color: "red" },
+    { title: "Pass Rate", value: `${summary.performance.pass_rate}%`, color: "green" },
   ];
 }
 
@@ -138,7 +141,13 @@ export default function ReportsPage() {
         {TABS.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => {
+              // Cleared in the same batch as the tab switch — otherwise the
+              // previous tab's rows (a different shape) render for one frame
+              // under the new tab's table before the fetch below resolves.
+              setResult(null);
+              setActiveTab(tab.key);
+            }}
             className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition ${
               activeTab === tab.key
                 ? "border-purple-600 text-purple-600"

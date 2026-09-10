@@ -31,8 +31,12 @@ export default function ViewAssessmentModal({ assessment, typeName, onClose }) {
       setLoading(false);
     }
   };
+  const isBatchWise = assessment?.scheduling_type === "batch_wise";
+  const isFixed = assessment?.scheduling_type === "fixed";
+  const isFlexible = assessment?.scheduling_type === "flexible";
+
   useEffect(() => {
-    if (assessment?.is_batch_wise) {
+    if (isBatchWise) {
       loadBatches();
     }
   }, [assessment]);
@@ -143,6 +147,13 @@ export default function ViewAssessmentModal({ assessment, typeName, onClose }) {
                 </p>
               </div>
 
+              <div>
+                <b>Library</b>
+                <p className="text-gray-600">
+                  {assessment.is_library ? "Yes" : "No"}
+                </p>
+              </div>
+
               <div className="col-span-2">
                 <b>Description</b>
                 <p className="text-gray-600">
@@ -151,32 +162,79 @@ export default function ViewAssessmentModal({ assessment, typeName, onClose }) {
               </div>
 
               <div>
-                <b>Publish Date</b>
-                <p className="text-gray-600">
-                  {assessment.publish_date || "-"}
+                <b>Scheduling Type</b>
+                <p className="text-gray-600 capitalize">
+                  {assessment.scheduling_type?.replace("_", " ") || "-"}
                 </p>
               </div>
 
-              <div>
-                <b>Total Duration</b>
-                <p className="text-gray-600">
-                  {calculateDuration()} minutes
-                </p>
-              </div>
+              {isFixed && (
+                <>
+                  <div>
+                    <b>Publish Date</b>
+                    <p className="text-gray-600">
+                      {assessment.publish_date || "-"}
+                    </p>
+                  </div>
 
-              <div>
-                <b>Start Time</b>
-                <p className="text-gray-600">
-                  {assessment.start_time || "-"}
-                </p>
-              </div>
+                  <div>
+                    <b>Total Duration</b>
+                    <p className="text-gray-600">
+                      {calculateDuration()} minutes
+                    </p>
+                  </div>
 
-              <div>
-                <b>End Time</b>
-                <p className="text-gray-600">
-                  {assessment.end_time || "-"}
-                </p>
-              </div>
+                  <div>
+                    <b>Start Time</b>
+                    <p className="text-gray-600">
+                      {assessment.start_time || "-"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <b>End Time</b>
+                    <p className="text-gray-600">
+                      {assessment.end_time || "-"}
+                    </p>
+                  </div>
+                </>
+              )}
+
+              {isFlexible && (
+                <>
+                  <div>
+                    <b>Start Date</b>
+                    <p className="text-gray-600">
+                      {assessment.start_date || "-"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <b>End Date</b>
+                    <p className="text-gray-600">
+                      {assessment.end_date || "-"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <b>Duration Per Attempt</b>
+                    <p className="text-gray-600">
+                      {assessment.duration_minutes
+                        ? `${assessment.duration_minutes} minutes`
+                        : "-"}
+                    </p>
+                  </div>
+                </>
+              )}
+
+              {isBatchWise && (
+                <div className="col-span-2">
+                  <b>Schedule</b>
+                  <p className="text-gray-600">
+                    Managed per batch — see the Batch tab.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <b>Shuffle Questions</b>

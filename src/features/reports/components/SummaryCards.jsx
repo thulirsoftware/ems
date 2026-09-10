@@ -9,6 +9,9 @@ import {
   Award,
   AlertTriangle,
   Layers,
+  HelpCircle,
+  Hourglass,
+  Target,
 } from "lucide-react";
 
 const icons = {
@@ -22,6 +25,9 @@ const icons = {
   "Highest Score": Trophy,
   "Lowest Score": AlertTriangle,
   Batches: Layers,
+  Questions: HelpCircle,
+  "Pending Evaluation": Hourglass,
+  "Pass Rate": Target,
 };
 
 const gradients = {
@@ -35,6 +41,7 @@ const gradients = {
   amber: "from-amber-500 to-orange-600",
   red: "from-red-500 to-red-700",
   cyan: "from-cyan-500 to-blue-700",
+  teal: "from-teal-500 to-teal-700",
 };
 
 export default function SummaryCards({ data = [] }) {

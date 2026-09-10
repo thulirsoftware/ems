@@ -1,7 +1,8 @@
 import {
   ClipboardList,
   HelpCircle,
-  Users,
+  Layers,
+  UserPlus,
   Activity,
   Trophy,
 } from "lucide-react";
@@ -39,12 +40,18 @@ export default function AssessmentPerformanceTable({ result, onPageChange }) {
 
               <th className="text-left px-6 py-4">Assessment</th>
 
+              <th className="text-left py-4">Type</th>
+
               <th className="text-center py-4">
                 <HelpCircle size={18} className="mx-auto" />
               </th>
 
               <th className="text-center py-4">
-                <Users size={18} className="mx-auto" />
+                <Layers size={18} className="mx-auto" />
+              </th>
+
+              <th className="text-center py-4">
+                <UserPlus size={18} className="mx-auto" />
               </th>
 
               <th className="text-center py-4">
@@ -67,6 +74,10 @@ export default function AssessmentPerformanceTable({ result, onPageChange }) {
                 Completion
               </th>
 
+              <th className="text-center py-4">
+                Pass Rate
+              </th>
+
             </tr>
 
           </thead>
@@ -75,7 +86,7 @@ export default function AssessmentPerformanceTable({ result, onPageChange }) {
 
             {data.length === 0 && (
               <tr>
-                <td colSpan={8} className="text-center py-8 text-gray-400">
+                <td colSpan={11} className="text-center py-8 text-gray-400">
                   No assessments found
                 </td>
               </tr>
@@ -94,6 +105,15 @@ export default function AssessmentPerformanceTable({ result, onPageChange }) {
 
                   <td className="px-6 py-4 font-medium">
                     {item.title}
+                    {!item.is_active && (
+                      <span className="ml-2 inline-flex items-center rounded-full bg-gray-100 text-gray-500 px-2 py-0.5 text-[10px] font-semibold align-middle">
+                        Inactive
+                      </span>
+                    )}
+                  </td>
+
+                  <td className="py-4 text-gray-600 capitalize">
+                    {item.type || "-"}
                   </td>
 
                   <td className="text-center">
@@ -102,6 +122,10 @@ export default function AssessmentPerformanceTable({ result, onPageChange }) {
 
                   <td className="text-center">
                     {item.batches}
+                  </td>
+
+                  <td className="text-center">
+                    {item.assigned}
                   </td>
 
                   <td className="text-center">
@@ -128,6 +152,16 @@ export default function AssessmentPerformanceTable({ result, onPageChange }) {
                     <span className="px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-semibold">
 
                       {completionRate}%
+
+                    </span>
+
+                  </td>
+
+                  <td className="text-center">
+
+                    <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
+
+                      {item.pass_rate}%
 
                     </span>
 

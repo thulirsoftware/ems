@@ -14,6 +14,21 @@ const AssessmentService = {
     return res.data;
   },
 
+  getLibrary: async () => {
+    const res = await http.get("/admin/assessments/library");
+    return res.data;
+  },
+
+  getUpcoming: async () => {
+    const res = await http.get("/admin/assessments/upcoming");
+    return res.data;
+  },
+
+  getRunning: async () => {
+    const res = await http.get("/admin/assessments/running");
+    return res.data;
+  },
+
 
   createAssessment: async (payload) => {
     const res = await http.post("/admin/assessments", payload);
@@ -56,6 +71,37 @@ const AssessmentService = {
 
   deleteQuestion: async (questionId) => {
     await http.delete(`/admin/questions/${questionId}`);
+  },
+  bulkStoreQuestions: async (assessmentId, file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await http.post(
+      `/admin/questions/bulk-store/${assessmentId}`,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    );
+    return res.data;
+  },
+
+  // ================= CHOICES =================
+  getChoices: async (questionId) => {
+    const res = await http.get(`/admin/questions/${questionId}/choices`);
+    return res.data;
+  },
+  createChoice: async (questionId, payload) => {
+    const res = await http.post(
+      `/admin/questions/${questionId}/choices`,
+      payload
+    );
+    return res.data;
+  },
+  updateChoice: async (choiceId, payload) => {
+    const res = await http.put(`/admin/choices/${choiceId}`, payload);
+    return res.data;
+  },
+  deleteChoice: async (choiceId) => {
+    await http.delete(`/admin/choices/${choiceId}`);
   },
   getAssessmentWithQuestions: async (id) => {
     const res = await http.get(`/admin/assessments/${id}/questions`);
@@ -156,6 +202,16 @@ const AssessmentService = {
     const res = await http.get(`/admin/results/${assessmentId}/rank-list`, {
       params: batchId ? { batch_id: batchId } : {},
     });
+    return res.data;
+  },
+
+  // ================= RE-EXAM =================
+  createReExam: async (payload) => {
+    const res = await http.post("/admin/re-exam", payload);
+    return res.data;
+  },
+  createFilteredReExam: async (payload) => {
+    const res = await http.post("/admin/re-exam/filtered", payload);
     return res.data;
   },
 

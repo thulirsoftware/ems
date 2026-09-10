@@ -76,7 +76,7 @@ export default function ManualCorrectionResultPage() {
         </div>
 
         {/* SCORE SUMMARY */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-10">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-6 mt-10">
 
           <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
             <p className="text-sm text-gray-500">Score</p>
@@ -106,12 +106,54 @@ export default function ManualCorrectionResultPage() {
             </p>
           </div>
 
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+            <p className="text-sm text-gray-500">Unanswered</p>
+            <p className="text-2xl font-bold text-gray-600">
+              {result.unanswered}
+            </p>
+          </div>
+
         </div>
 
-        {/* TOTAL QUESTIONS */}
-        <div className="mt-8 text-center text-gray-600">
-          Total Questions: <span className="font-semibold">{result.questions?.length}</span>
-        </div>
+        {/* QUESTION BREAKDOWN */}
+        {result.questions?.length > 0 && (
+          <div className="mt-10 text-left space-y-3">
+            <h3 className="font-semibold text-gray-700">
+              Question Breakdown
+            </h3>
+
+            {result.questions.map((q, i) => (
+              <div
+                key={q.id}
+                className={`border rounded-lg p-4 ${
+                  q.is_correct === true
+                    ? "border-green-200 bg-green-50"
+                    : q.is_correct === false
+                    ? "border-red-200 bg-red-50"
+                    : "border-gray-200 bg-gray-50"
+                }`}
+              >
+                <p className="font-medium text-sm text-gray-800">
+                  {i + 1}. {q.question_text}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Answer: {q.user_answer || "No answer submitted"}
+                </p>
+                <p className="text-xs font-semibold mt-1">
+                  {q.is_correct === true && (
+                    <span className="text-green-600">Correct</span>
+                  )}
+                  {q.is_correct === false && (
+                    <span className="text-red-600">Incorrect</span>
+                  )}
+                  {q.is_correct === null && (
+                    <span className="text-gray-500">Unanswered</span>
+                  )}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* ACTION BUTTON */}
         <div className="flex justify-center mt-10">

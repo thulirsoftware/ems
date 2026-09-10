@@ -130,7 +130,7 @@ export default function BatchFormModal({
                                 {Array.from(
                                     new Map(
                                         assessments
-                                            .filter((item) => item.is_batch_wise)
+                                            .filter((item) => item.scheduling_type === "batch_wise")
                                             .map((item) => [item.id, item])
                                     ).values()
                                 ).map((item) => (

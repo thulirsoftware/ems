@@ -6,6 +6,9 @@ import {
   TrendingUp,
   AlertTriangle,
   Trophy,
+  HelpCircle,
+  BookOpen,
+  CalendarClock,
 } from "lucide-react";
 
 import {
@@ -88,6 +91,18 @@ export default function Dashboard() {
       value: `${dashboard.attempts.completion_rate}%`,
       icon: TrendingUp,
       color: "from-rose-500 to-rose-600",
+    },
+    {
+      title: "Questions",
+      value: dashboard.questions,
+      icon: HelpCircle,
+      color: "from-sky-500 to-sky-600",
+    },
+    {
+      title: "Assignments",
+      value: dashboard.assignments,
+      icon: BookOpen,
+      color: "from-violet-500 to-violet-600",
     },
   ];
 
@@ -227,12 +242,23 @@ export default function Dashboard() {
                 <p className="text-xs text-gray-500">Library</p>
               </div>
             </div>
+
+            <div className="flex justify-center gap-4 mt-4 text-xs text-gray-500">
+              <span>Batch Wise: <b className="text-gray-700">{dashboard.assessments.batch_wise}</b></span>
+              <span>Flexible: <b className="text-gray-700">{dashboard.assessments.flexible}</b></span>
+            </div>
           </div>
 
           <div className="rounded-2xl bg-white shadow-sm p-6">
             <h3 className="font-semibold text-lg">Batches</h3>
 
-            <div className="grid grid-cols-3 mt-5 gap-4 text-center">
+            <div className="grid grid-cols-4 mt-5 gap-4 text-center">
+              <div>
+                <h2 className="font-bold text-2xl text-gray-700">
+                  {dashboard.batches.total}
+                </h2>
+                <p className="text-xs text-gray-500">Total</p>
+              </div>
               <div>
                 <h2 className="font-bold text-2xl text-indigo-600">
                   {dashboard.batches.upcoming}
@@ -257,7 +283,13 @@ export default function Dashboard() {
           <div className="rounded-2xl bg-white shadow-sm p-6">
             <h3 className="font-semibold text-lg">Attempts</h3>
 
-            <div className="grid grid-cols-3 mt-5 gap-4 text-center">
+            <div className="grid grid-cols-4 mt-5 gap-4 text-center">
+              <div>
+                <h2 className="font-bold text-2xl text-gray-700">
+                  {dashboard.attempts.total}
+                </h2>
+                <p className="text-xs text-gray-500">Total</p>
+              </div>
               <div>
                 <h2 className="font-bold text-2xl text-indigo-600">
                   {dashboard.attempts.in_progress}
@@ -279,6 +311,49 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Upcoming batches */}
+      <div className="bg-white rounded-2xl shadow-sm p-6 mt-8">
+        <div className="flex items-center gap-2 mb-6">
+          <CalendarClock className="text-indigo-500" />
+          <h2 className="font-semibold text-xl">Upcoming Batches</h2>
+        </div>
+
+        <table className="w-full">
+          <thead>
+            <tr className="text-left border-b">
+              <th className="pb-3">Batch</th>
+              <th>Assessment</th>
+              <th>Publish Date</th>
+              <th>Time</th>
+              <th>Capacity</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dashboard.upcoming_batches.length === 0 && (
+              <tr>
+                <td colSpan={5} className="py-4 text-gray-400 text-sm">
+                  No upcoming batches
+                </td>
+              </tr>
+            )}
+
+            {dashboard.upcoming_batches.map((batch) => (
+              <tr key={batch.batch_id} className="border-b last:border-none hover:bg-gray-50">
+                <td className="py-4">{batch.batch_name}</td>
+                <td>{batch.assessment_title}</td>
+                <td>{batch.publish_date || "-"}</td>
+                <td>
+                  {batch.start_time && batch.end_time
+                    ? `${batch.start_time} - ${batch.end_time}`
+                    : "-"}
+                </td>
+                <td>{batch.capacity ?? "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       {/* Top performers + Pending evaluations */}

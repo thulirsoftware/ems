@@ -62,7 +62,7 @@ export default function AttemptsReportTable({ result, onPageChange }) {
                       statusStyle[row.status] || "bg-gray-100 text-gray-600"
                     }`}
                   >
-                    {row.status.replace("_", " ")}
+                    {row.status?.replace("_", " ") ?? "-"}
                   </span>
                 </td>
                 <td className="text-center font-semibold text-indigo-600">

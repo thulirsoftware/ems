@@ -66,7 +66,7 @@ export default function QuestionsReportTable({ result, onPageChange }) {
                       difficultyStyle[row.difficulty] || difficultyStyle.not_attempted
                     }`}
                   >
-                    {row.difficulty.replace("_", " ")}
+                    {row.difficulty?.replace("_", " ") ?? "-"}
                   </span>
                 </td>
               </tr>

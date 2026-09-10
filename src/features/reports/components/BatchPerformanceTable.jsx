@@ -7,6 +7,13 @@ import {
 } from "lucide-react";
 import ReportPagination from "./ReportPagination";
 
+const statusStyle = {
+  upcoming: "bg-blue-100 text-blue-700",
+  running: "bg-green-100 text-green-700",
+  finished: "bg-gray-100 text-gray-600",
+  unscheduled: "bg-amber-100 text-amber-700",
+};
+
 export default function BatchPerformanceTable({ result, onPageChange }) {
   const data = result?.data || [];
   return (
@@ -45,6 +52,14 @@ export default function BatchPerformanceTable({ result, onPageChange }) {
                 Assessment
               </th>
 
+              <th className="text-left">
+                Schedule
+              </th>
+
+              <th className="text-center">
+                Status
+              </th>
+
               <th className="text-center">
                 <Users size={18} className="mx-auto" />
               </th>
@@ -69,6 +84,10 @@ export default function BatchPerformanceTable({ result, onPageChange }) {
                 Lowest
               </th>
 
+              <th className="text-center">
+                Pass Rate
+              </th>
+
             </tr>
 
           </thead>
@@ -77,7 +96,7 @@ export default function BatchPerformanceTable({ result, onPageChange }) {
 
             {data.length === 0 && (
               <tr>
-                <td colSpan={8} className="text-center py-8 text-gray-400">
+                <td colSpan={11} className="text-center py-8 text-gray-400">
                   No batches found
                 </td>
               </tr>
@@ -109,6 +128,27 @@ export default function BatchPerformanceTable({ result, onPageChange }) {
 
                   {batch.assessment_title}
 
+                </td>
+
+                <td className="text-gray-600 text-sm">
+                  {batch.publish_date
+                    ? `${batch.publish_date} · ${batch.start_time}-${batch.end_time}`
+                    : "-"}
+                  {batch.capacity && (
+                    <span className="block text-xs text-gray-400">
+                      Capacity: {batch.capacity}
+                    </span>
+                  )}
+                </td>
+
+                <td className="text-center">
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${
+                      statusStyle[batch.status] || "bg-gray-100 text-gray-600"
+                    }`}
+                  >
+                    {batch.status || "-"}
+                  </span>
                 </td>
 
                 <td className="text-center">
@@ -170,6 +210,12 @@ export default function BatchPerformanceTable({ result, onPageChange }) {
 
                   {batch.lowest_percentage}%
 
+                </td>
+
+                <td className="text-center">
+                  <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
+                    {batch.pass_rate}%
+                  </span>
                 </td>
 
               </tr>

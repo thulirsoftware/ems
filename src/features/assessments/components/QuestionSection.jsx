@@ -2,6 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import AssessmentService from "../../../services/assesment.service";
 import * as XLSX from "xlsx";
+import { useConfirm } from "../../../hooks/useConfirm";
 
 const emptyChoices = [
   { option: "", is_correct: false },
@@ -21,7 +22,38 @@ export default function QuestionSection({ assessmentId }) {
   const [editingId, setEditingId] = useState(null);
   const [editingOrder, setEditingOrder] = useState(null);
 
-  const [importRows, setImportRows] = useState([]);
+  const [importFile, setImportFile] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
+
+  /* ---------------- DELETE QUESTION ---------------- */
+
+  const deleteQuestion = async (question) => {
+    const ok = await confirm({
+      title: "Delete this question?",
+      description: "This action cannot be undone.",
+      confirmLabel: "Delete",
+      variant: "danger",
+    });
+
+    if (!ok) return;
+
+    try {
+      await AssessmentService.deleteQuestion(question.id);
+
+      setQuestions((prev) => prev.filter((q) => q.id !== question.id));
+
+      if (editingId === question.id) {
+        resetForm();
+      }
+
+      toast.success("Question deleted");
+    } catch (err) {
+      toast.error(
+        err.response?.data?.message || "Failed to delete question."
+      );
+    }
+  };
 
   /* ---------------- OPTION CHANGE ---------------- */
 
@@ -226,11 +258,11 @@ export default function QuestionSection({ assessmentId }) {
     const template = [
       {
         question_text: "What is React?",
-        option_1: "Library",
-        option_2: "Framework",
-        option_3: "Language",
-        option_4: "Tool",
-        correct_option: 1,
+        choice_1: "Library",
+        choice_2: "Framework",
+        choice_3: "Language",
+        choice_4: "Tool",
+        correct_choice: "Library",
       },
     ];
 
@@ -243,7 +275,7 @@ export default function QuestionSection({ assessmentId }) {
 
   };
 
-  /* ---------------- FILE UPLOAD (ONLY READ) ---------------- */
+  /* ---------------- FILE SELECT ---------------- */
 
   const handleFileUpload = (e) => {
 
@@ -268,25 +300,8 @@ export default function QuestionSection({ assessmentId }) {
       e.target.value = "";
       return;
     }
-    if (!file) return;
 
-    const reader = new FileReader();
-
-    reader.onload = (event) => {
-
-      const data = new Uint8Array(event.target.result);
-      const workbook = XLSX.read(data, { type: "array" });
-
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet);
-
-      setImportRows(rows);
-
-      toast.success(`${rows.length} questions loaded. Click Import.`);
-
-    };
-
-    reader.readAsArrayBuffer(file);
+    setImportFile(file);
 
   };
 
@@ -294,70 +309,43 @@ export default function QuestionSection({ assessmentId }) {
 
   const importQuestions = async () => {
 
-    if (importRows.length === 0) {
-      toast.error("No file loaded");
+    if (!importFile) {
+      toast.error("No file selected");
       return;
     }
 
     try {
 
-      setLoading(true);
+      setImporting(true);
 
-      for (let i = 0; i < importRows.length; i++) {
+      const res = await AssessmentService.bulkStoreQuestions(
+        assessmentId,
+        importFile
+      );
 
-        const row = importRows[i];
-        const correct = Number(row.correct_option);
+      const refreshed = await AssessmentService.getAssessmentWithQuestionsChoices(
+        assessmentId
+      );
 
-        const payload = {
-          type: "mcq",
-          question_text: row.question_text,
-          order: questions.length + i + 1,
-          choices: [
-            {
-              option: row.option_1,
-              is_correct: correct === 1,
-              order: 1,
-            },
-            {
-              option: row.option_2,
-              is_correct: correct === 2,
-              order: 2,
-            },
-            {
-              option: row.option_3,
-              is_correct: correct === 3,
-              order: 3,
-            },
-            {
-              option: row.option_4,
-              is_correct: correct === 4,
-              order: 4,
-            },
-          ],
-        };
+      setQuestions(refreshed || []);
+      setImportFile(null);
 
-        const saved =
-          await AssessmentService.createQuestionWithChoices(
-            assessmentId,
-            payload
-          );
+      toast.success(
+        `${res.inserted} question(s) imported.` +
+          (res.errors?.length ? ` ${res.errors.length} row(s) skipped.` : "")
+      );
 
-        setQuestions((prev) => [...prev, saved]);
-
+      if (res.errors?.length) {
+        console.warn("Bulk import skipped rows:", res.errors);
       }
-
-      toast.success("Questions imported successfully");
-
-      setImportRows([]);
 
     } catch (err) {
 
-      console.error(err);
-      toast.error("Import failed");
+      toast.error(err.response?.data?.message || "Import failed");
 
     } finally {
 
-      setLoading(false);
+      setImporting(false);
 
     }
 
@@ -384,12 +372,13 @@ export default function QuestionSection({ assessmentId }) {
           className="border p-2 rounded"
         />
 
-        {importRows.length > 0 && (
+        {importFile && (
           <button
             onClick={importQuestions}
-            className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+            disabled={importing}
+            className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
           >
-            Import Questions ({importRows.length})
+            {importing ? "Importing..." : `Import "${importFile.name}"`}
           </button>
         )}
 
@@ -479,18 +468,29 @@ export default function QuestionSection({ assessmentId }) {
               {i + 1}. {q.question_text}
             </p>
 
-            <button
-              onClick={() => handleEdit(q)}
-              className="text-blue-600 text-sm"
-            >
-              Edit
-            </button>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => handleEdit(q)}
+                className="text-blue-600 text-sm"
+              >
+                Edit
+              </button>
+
+              <button
+                onClick={() => deleteQuestion(q)}
+                className="text-red-600 text-sm"
+              >
+                Delete
+              </button>
+            </div>
 
           </div>
 
         ))}
 
       </div>
+
+      {confirmDialog}
 
     </div>
 

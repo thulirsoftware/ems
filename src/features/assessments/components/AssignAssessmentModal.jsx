@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AlertTriangle } from "lucide-react";
 import AssessmentService from "../../../services/assesment.service";
 
 export default function AssignAssessmentModal({
@@ -35,14 +36,18 @@ export default function AssignAssessmentModal({
         );
     };
 
-    const assign = async () => {
+    const save = async () => {
 
-        const newUsers = users
+        const toAssign = users
             .filter(u => !u.assigned && selectedUsers.includes(u.user_id))
             .map(u => u.user_id);
 
-        if (newUsers.length === 0) {
-            toast.error("No new users selected");
+        const toUnassign = users
+            .filter(u => u.assigned && !selectedUsers.includes(u.user_id))
+            .map(u => u.user_id);
+
+        if (toAssign.length === 0 && toUnassign.length === 0) {
+            toast.error("No changes to save");
             return;
         }
 
@@ -50,26 +55,40 @@ export default function AssignAssessmentModal({
 
             setLoading(true);
 
-            const res = await AssessmentService.assignAssessment({
-                assessment_id: assessmentId,
-                user_ids: newUsers,
-            });
+            let message = "";
 
-            const data = res.data ?? res;
+            if (toAssign.length > 0) {
 
-            let message = "Assessment assigned successfully";
+                const res = await AssessmentService.assignAssessment({
+                    assessment_id: assessmentId,
+                    user_ids: toAssign,
+                });
 
-            if (data.blocked_due_to_conflict?.length) {
+                const data = res.data ?? res;
 
-                const conflictNames = data.blocked_due_to_conflict
-                    .map(c => {
-                        const user = users.find(u => u.user_id === c.user_id);
-                        return `${user?.name} (conflicts with "${c.conflicting_assessment_title}")`;
-                    })
-                    .join("\n");
+                message += `${data.assigned?.length ?? toAssign.length} user(s) assigned.`;
 
-                message += `\n\nThe following users could not be assigned because they already have another exam scheduled:\n\n${conflictNames}`;
+                if (data.blocked_due_to_conflict?.length) {
 
+                    const conflictNames = data.blocked_due_to_conflict
+                        .map(c => {
+                            const user = users.find(u => u.user_id === c.user_id);
+                            return `${user?.name} (conflicts with "${c.conflicting_assessment_title}")`;
+                        })
+                        .join("\n");
+
+                    message += `\n\nThe following users could not be assigned because they already have another exam scheduled:\n\n${conflictNames}`;
+                }
+            }
+
+            if (toUnassign.length > 0) {
+
+                await AssessmentService.removeAssignment({
+                    assessment_id: assessmentId,
+                    user_ids: toUnassign,
+                });
+
+                message += `${message ? "\n\n" : ""}${toUnassign.length} user(s) unassigned.`;
             }
 
             toast.success(message);
@@ -79,7 +98,7 @@ export default function AssignAssessmentModal({
         } catch (err) {
 
             console.error(err);
-            toast.error("Assignment failed");
+            toast.error(err?.response?.data?.message || "Failed to save assignment changes");
 
         } finally {
 
@@ -105,14 +124,11 @@ export default function AssignAssessmentModal({
                     {users.map((u) => (
                         <label
                             key={u.user_id}
-                            className={`flex items-center gap-3 border p-3 rounded
-      ${u.assigned ? "bg-gray-100 cursor-not-allowed" : "cursor-pointer"}
-    `}
+                            className="flex items-center gap-3 border p-3 rounded cursor-pointer hover:bg-gray-50"
                         >
                             <input
                                 type="checkbox"
                                 checked={selectedUsers.includes(u.user_id)}
-                                disabled={u.assigned}
                                 onChange={() => toggleUser(u.user_id)}
                             />
 
@@ -122,6 +138,13 @@ export default function AssignAssessmentModal({
                                 {u.assigned && (
                                     <p className="text-xs text-green-600 font-semibold">
                                         Already Assigned
+                                    </p>
+                                )}
+
+                                {u.has_time_conflict && (
+                                    <p className="flex items-center gap-1 text-xs text-amber-600 font-medium mt-0.5">
+                                        <AlertTriangle size={12} />
+                                        Conflicts with "{u.conflicting_assessment_title}"
                                     </p>
                                 )}
                             </div>
@@ -145,10 +168,10 @@ export default function AssignAssessmentModal({
 
                     <button
                         disabled={loading}
-                        onClick={assign}
+                        onClick={save}
                         className="bg-red-600 text-white px-4 py-2 rounded disabled:opacity-50"
                     >
-                        {loading ? "Assigning..." : "Assign"}
+                        {loading ? "Saving..." : "Save"}
                     </button>
                 </div>
             </div>

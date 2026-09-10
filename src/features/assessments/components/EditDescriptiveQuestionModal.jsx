@@ -2,24 +2,31 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import AssessmentService from "../../../services/assesment.service";
 import * as XLSX from "xlsx";
+import { useConfirm } from "../../../hooks/useConfirm";
 
 export default function EditDescriptiveQuestionModal({ assessmentId }) {
 
   const [questions, setQuestions] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [questionText, setQuestionText] = useState("");
-  const [importRows, setImportRows] = useState([]);
+  const [importFile, setImportFile] = useState(null);
+  const [importing, setImporting] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
 
   // ================= LOAD QUESTIONS =================
+
+  const loadQuestions = async () => {
+    const data = await AssessmentService.getQuestions(assessmentId);
+    setQuestions(data || []);
+  };
 
   useEffect(() => {
 
     if (!assessmentId) return;
 
-    AssessmentService.getQuestions(assessmentId)
-      .then(setQuestions);
-
+    loadQuestions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assessmentId]);
 
 
@@ -124,6 +131,37 @@ export default function EditDescriptiveQuestionModal({ assessmentId }) {
   };
 
 
+  // ================= DELETE =================
+
+  const deleteQuestion = async (question) => {
+    const ok = await confirm({
+      title: "Delete this question?",
+      description: "This action cannot be undone.",
+      confirmLabel: "Delete",
+      variant: "danger",
+    });
+
+    if (!ok) return;
+
+    try {
+      await AssessmentService.deleteQuestion(question.id);
+
+      setQuestions(prev => prev.filter(q => q.id !== question.id));
+
+      if (editingId === question.id) {
+        setEditingId(null);
+        setQuestionText("");
+      }
+
+      toast.success("Question deleted");
+    } catch (err) {
+      toast.error(
+        err.response?.data?.message || "Failed to delete question."
+      );
+    }
+  };
+
+
   // ================= TEMPLATE DOWNLOAD =================
 
   const downloadTemplate = () => {
@@ -142,30 +180,14 @@ export default function EditDescriptiveQuestionModal({ assessmentId }) {
   };
 
 
-  // ================= FILE UPLOAD =================
+  // ================= FILE SELECT =================
 
   const handleFileUpload = (e) => {
 
     const file = e.target.files[0];
     if (!file) return;
 
-    const reader = new FileReader();
-
-    reader.onload = (event) => {
-
-      const data = new Uint8Array(event.target.result);
-      const workbook = XLSX.read(data, { type: "array" });
-
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet);
-
-      setImportRows(rows);
-
-      toast.success(`${rows.length} questions ready to import`);
-
-    };
-
-    reader.readAsArrayBuffer(file);
+    setImportFile(file);
 
   };
 
@@ -174,46 +196,39 @@ export default function EditDescriptiveQuestionModal({ assessmentId }) {
 
   const importQuestions = async () => {
 
-    if (importRows.length === 0) {
+    if (!importFile) {
       toast.error("Upload file first");
       return;
     }
 
     try {
 
-      setLoading(true);
+      setImporting(true);
 
-      for (let i = 0; i < importRows.length; i++) {
+      const res = await AssessmentService.bulkStoreQuestions(
+        assessmentId,
+        importFile
+      );
 
-        const row = importRows[i];
+      await loadQuestions();
+      setImportFile(null);
 
-        const payload = {
-          type: "descriptive",
-          question_text: row.question_text,
-          order: questions.length + i + 1
-        };
+      toast.success(
+        `${res.inserted} question(s) imported.` +
+          (res.errors?.length ? ` ${res.errors.length} row(s) skipped.` : "")
+      );
 
-        const saved =
-          await AssessmentService.createQuestion(
-            assessmentId,
-            payload
-          );
-
-        setQuestions(prev => [...prev, saved]);
-
+      if (res.errors?.length) {
+        console.warn("Bulk import skipped rows:", res.errors);
       }
-
-      setImportRows([]);
-      toast.success("Questions imported successfully");
 
     } catch (err) {
 
-      console.error(err);
-      toast.error("Import failed");
+      toast.error(err.response?.data?.message || "Import failed");
 
     } finally {
 
-      setLoading(false);
+      setImporting(false);
 
     }
 
@@ -248,12 +263,13 @@ export default function EditDescriptiveQuestionModal({ assessmentId }) {
             className="border p-2 rounded"
           />
 
-          {importRows.length > 0 && (
+          {importFile && (
             <button
               onClick={importQuestions}
-              className="px-4 py-2 bg-purple-600 text-white rounded"
+              disabled={importing}
+              className="px-4 py-2 bg-purple-600 text-white rounded disabled:opacity-50"
             >
-              Import ({importRows.length})
+              {importing ? "Importing..." : `Import "${importFile.name}"`}
             </button>
           )}
 
@@ -324,18 +340,29 @@ export default function EditDescriptiveQuestionModal({ assessmentId }) {
 
             <p>{i + 1}. {q.question_text}</p>
 
-            <button
-              onClick={() => handleEdit(q)}
-              className="text-blue-600"
-            >
-              Edit
-            </button>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => handleEdit(q)}
+                className="text-blue-600"
+              >
+                Edit
+              </button>
+
+              <button
+                onClick={() => deleteQuestion(q)}
+                className="text-red-600"
+              >
+                Delete
+              </button>
+            </div>
 
           </div>
 
         ))}
 
       </div>
+
+      {confirmDialog}
 
     </div>
 

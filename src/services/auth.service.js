@@ -20,6 +20,14 @@ const authService = {
     const res = await http.post("/admin/logout");
     return res.data;
   },
+  register: async (data) => {
+    const res = await http.post("/admin/register", {
+      name: data.name,
+      email: data.email,
+      password: data.password,
+    });
+    return res.data;
+  },
 };
 
 export default authService;

@@ -45,15 +45,7 @@ export default function ErrorPage() {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => {
-                        
-
-                        if (token) {
-                            navigate("/admin/dashboard");
-                        } else if (roleName === "branch_admin") {
-                            navigate("/branch/dashboard");
-                        } else {
-                            navigate("/login");
-                        }
+                        navigate(token ? "/admin/dashboard" : "/login");
                     }}
                     className="
                         mt-6 px-6 py-3 rounded-xl font-semibold

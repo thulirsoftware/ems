@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Filter, X } from "lucide-react";
 import AssessmentService from "../../../services/assesment.service";
 import BatchService from "../../../services/batch.service";
+import UserService from "../../../services/user.service";
 
 const STATUS_OPTIONS = [
   { value: "", label: "Any status" },
@@ -14,6 +15,7 @@ const emptyFilters = {
   assessment_id: "",
   batch_id: "",
   assessment_type: "",
+  user_id: "",
   status: "",
   passing_percentage: "",
   from: "",
@@ -24,6 +26,7 @@ export default function ReportFilterBar({ filters, onChange }) {
   const [assessments, setAssessments] = useState([]);
   const [assessmentTypes, setAssessmentTypes] = useState([]);
   const [batches, setBatches] = useState([]);
+  const [users, setUsers] = useState([]);
   const [local, setLocal] = useState({ ...emptyFilters, ...filters });
 
   useEffect(() => {
@@ -40,6 +43,8 @@ export default function ReportFilterBar({ filters, onChange }) {
     AssessmentService.getAssessmentTypes().then((data) =>
       setAssessmentTypes(data || [])
     );
+
+    UserService.UserList().then((data) => setUsers(data || []));
   }, []);
 
   useEffect(() => {
@@ -120,6 +125,22 @@ export default function ReportFilterBar({ filters, onChange }) {
             {assessmentTypes.map((t) => (
               <option key={t.id} value={t.slug}>
                 {t.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Candidate</label>
+          <select
+            value={local.user_id}
+            onChange={(e) => update("user_id", e.target.value)}
+            className="w-full border rounded-md px-3 py-2 text-sm"
+          >
+            <option value="">All candidates</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
               </option>
             ))}
           </select>

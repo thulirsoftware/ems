@@ -8,6 +8,8 @@ import ViewAssessmentModal from "../components/ViewAssessmentModal";
 import EditAssessmentModal from "../components/EditAssessmentModal";
 import AssignAssessmentModal from "../components/AssignAssessmentModal";
 import EvaluateStudentsModal from "../components/EvaluateStudentsModal";
+import RankListModal from "../components/RankListModal";
+import ReExamModal from "../components/ReExamModal";
 import BatchService from "../../../services/batch.service";
 import { PageLoader } from "../../../components/common/Spinner";
 import ErrorState from "../../../components/common/ErrorState";
@@ -15,6 +17,14 @@ import { EmptyTableRow } from "../../../components/common/EmptyState";
 import { useConfirm } from "../../../hooks/useConfirm";
 
 const PER_PAGE = 10;
+
+const VIEWS = [
+  { key: "all", label: "All" },
+  { key: "library", label: "Library" },
+  { key: "upcoming", label: "Upcoming" },
+  { key: "running", label: "Running" },
+  { key: "finished", label: "Finished" },
+];
 
 export default function AssessmentList() {
   const [assessments, setAssessments] = useState([]);
@@ -25,16 +35,17 @@ export default function AssessmentList() {
   const [editId, setEditId] = useState(null);
   const [assignId, setAssignId] = useState(null);
   const [search, setSearch] = useState("");
+  const [view, setView] = useState("all");
   const [assessmentTypes, setAssessmentTypes] = useState([]);
   const [evaluateId, setEvaluateId] = useState(null);
+  const [rankListItem, setRankListItem] = useState(null);
+  const [reExamItem, setReExamItem] = useState(null);
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
 
   useEffect(() => {
-    fetchAssessments();
-
     AssessmentService.getAssessmentTypes()
       .then((data) => setAssessmentTypes(data || []))
       .catch(() => toast.error("Failed to load assessment types"));
@@ -43,6 +54,13 @@ export default function AssessmentList() {
       .catch(() => toast.error("Failed to load batches"));
 
   }, []);
+
+  useEffect(() => {
+    fetchAssessments();
+    setCurrentPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
+
   const typeMap = useMemo(() => {
     const map = {};
     assessmentTypes.forEach((t) => {
@@ -64,7 +82,25 @@ export default function AssessmentList() {
     setLoading(true);
     setError(false);
     try {
-      const data = await AssessmentService.AssessmentList();
+      let data;
+
+      switch (view) {
+        case "library":
+          data = await AssessmentService.getLibrary();
+          break;
+        case "upcoming":
+          data = await AssessmentService.getUpcoming();
+          break;
+        case "running":
+          data = await AssessmentService.getRunning();
+          break;
+        case "finished":
+          data = await AssessmentService.getFinishedAssessments();
+          break;
+        default:
+          data = await AssessmentService.AssessmentList();
+      }
+
       setAssessments(data || []);
     } catch {
       setError(true);
@@ -156,7 +192,22 @@ export default function AssessmentList() {
         </div>
       </div>
 
-
+      {/* VIEW TABS */}
+      <div className="flex gap-2 border-b mb-4 overflow-x-auto">
+        {VIEWS.map((v) => (
+          <button
+            key={v.key}
+            onClick={() => setView(v.key)}
+            className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition ${
+              view === v.key
+                ? "border-purple-600 text-purple-600"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
 
       {/* TABLE */}
       <div className="bg-white rounded-xl shadow-md p-2 ">
@@ -189,24 +240,39 @@ export default function AssessmentList() {
             <tbody>
               {paginatedData.map((item, index) => (
                 <tr
-                  key={item.is_batch_wise ? `${item.id}-${item.batch_id}` : item.id}
+                  key={item.scheduling_type === "batch_wise" ? `${item.id}-${item.batch_id}` : item.id}
                   className="border-b hover:bg-gray-50 transition"
                 >
                   <td className="py-3 px-3">
                     {(currentPage - 1) * PER_PAGE + index + 1}
                   </td>
-                  <td className="py-3 px-3 font-medium">{item.title}</td>
+                  <td className="py-3 px-3 font-medium">
+                    <div className="flex items-center gap-2">
+                      {item.title}
+                      {item.is_library && (
+                        <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-700 px-2 py-0.5 text-[10px] font-semibold">
+                          Library
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="py-3 px-3 font-medium">
                     {typeMap[item.assessment_type_id] || "Unknown"}
                   </td>
                   <td className="py-3 px-3">
-                    {item.is_batch_wise
+                    {item.scheduling_type === "batch_wise"
                       ? batchMap[item.batch_id] || "-"
                       : "-"}
                   </td>
-                  <td className="py-3 px-3">{item.publish_date}</td>
                   <td className="py-3 px-3">
-                    {item.start_time} - {item.end_time}
+                    {item.scheduling_type === "flexible"
+                      ? `${item.start_date || "-"} → ${item.end_date || "-"}`
+                      : item.publish_date || "-"}
+                  </td>
+                  <td className="py-3 px-3">
+                    {item.scheduling_type === "flexible"
+                      ? `${item.duration_minutes ?? "-"} min`
+                      : `${item.start_time || "-"} - ${item.end_time || "-"}`}
                   </td>
                   <td className="py-3 px-3">
                     {item.is_active ? (
@@ -221,7 +287,7 @@ export default function AssessmentList() {
                   </td>
 
                   <td className="py-3 px-3 text-center">
-                    {item.is_batch_wise ? (
+                    {item.scheduling_type === "batch_wise" ? (
                       <span className="inline-flex items-center rounded-full bg-purple-100 text-purple-700 px-3 py-1 text-xs font-medium">
                         Batch
                       </span>
@@ -260,7 +326,7 @@ export default function AssessmentList() {
                             onClick={() => {
                               setEvaluateId({
                                 assessmentId: item.id,
-                                batchId: item.is_batch_wise
+                                batchId: item.scheduling_type === "batch_wise"
                                   ? item.batch_id
                                   : null,
                               });
@@ -293,6 +359,34 @@ export default function AssessmentList() {
                         >
                           Edit
                         </button>
+
+                        <button
+                          className="block w-full px-4 py-2 text-left hover:bg-gray-100"
+                          onClick={() => {
+                            setRankListItem({
+                              assessmentId: item.id,
+                              batchId: item.scheduling_type === "batch_wise"
+                                ? item.batch_id
+                                : null,
+                              title: item.title,
+                            });
+                            setOpenMenu(null);
+                          }}
+                        >
+                          Rank List
+                        </button>
+
+                        {item.scheduling_type !== "flexible" && (
+                          <button
+                            className="block w-full px-4 py-2 text-left hover:bg-gray-100"
+                            onClick={() => {
+                              setReExamItem(item);
+                              setOpenMenu(null);
+                            }}
+                          >
+                            Re-Exam
+                          </button>
+                        )}
 
                         <button
                           className="block w-full px-4 py-2 text-left text-red-600 hover:bg-red-50"
@@ -388,6 +482,26 @@ export default function AssessmentList() {
           assessmentId={evaluateId.assessmentId}
           batchId={evaluateId.batchId}
           onClose={() => setEvaluateId(null)}
+        />
+      )}
+
+      {rankListItem && (
+        <RankListModal
+          assessmentId={rankListItem.assessmentId}
+          batchId={rankListItem.batchId}
+          title={rankListItem.title}
+          onClose={() => setRankListItem(null)}
+        />
+      )}
+
+      {reExamItem && (
+        <ReExamModal
+          assessment={reExamItem}
+          onClose={() => setReExamItem(null)}
+          onSuccess={() => {
+            setReExamItem(null);
+            fetchAssessments();
+          }}
         />
       )}
     </>

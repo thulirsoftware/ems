@@ -74,6 +74,20 @@ export default function EvaluateStudentsModal({ assessmentId, batchId, onClose }
                                         Evaluate
                                     </button>
                                 )}
+
+                                {student.attempted && !student.grade_pending && (
+                                    <button
+                                        className="px-3 py-1 bg-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-300 transition"
+                                        onClick={() =>
+                                            navigate(
+                                                `/admin/result/${assessmentId}/${student.user_id}` +
+                                                    (batchId ? `?batch_id=${batchId}` : "")
+                                            )
+                                        }
+                                    >
+                                        View Result
+                                    </button>
+                                )}
                             </div>
                         </div>
                     ))}

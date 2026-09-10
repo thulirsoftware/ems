@@ -2,12 +2,14 @@ import {
     ChevronLeft, ChevronRight,
     ChevronDown,
     LogOut,
+    UserPlus,
 } from "lucide-react";
 import { useSidebarStore } from "../../../store/sidebarStore";
 import { useAuthStore } from "../../../store/authStore";
 import { useNavigate } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
 import authService from "../../../services/auth.service";
+import AddAdminModal from "./AddAdminModal";
 
 export default function Header() {
     const navigate = useNavigate();
@@ -17,6 +19,7 @@ export default function Header() {
     const { admin, logout } = useAuthStore();
 
     const [openProfile, setOpenProfile] = useState(false);
+    const [showAddAdmin, setShowAddAdmin] = useState(false);
     const profileRef = useRef(null);
 
     // close dropdown outside click
@@ -90,6 +93,17 @@ export default function Header() {
               "
                         >
                             <button
+                                onClick={() => {
+                                    setShowAddAdmin(true);
+                                    setOpenProfile(false);
+                                }}
+                                className="flex items-center gap-2 w-full px-4 py-3 hover:bg-gray-50 text-gray-700"
+                            >
+                                <UserPlus size={16} />
+                                Add Admin
+                            </button>
+
+                            <button
                                 onClick={async () => {
                                     try {
                                         await authService.logout();
@@ -108,6 +122,10 @@ export default function Header() {
                     )}
                 </div>
             </div>
+
+            {showAddAdmin && (
+                <AddAdminModal onClose={() => setShowAddAdmin(false)} />
+            )}
         </header>
     );
 }

@@ -5,6 +5,13 @@ import QuestionSection from "./QuestionSection";
 import DescriptiveQuestionModal from "./DescriptiveQuestionModal";
 import BatchService from "../../../services/batch.service";
 import BatchForm from "./BatchForm";
+
+const SCHEDULING_TYPES = [
+    { value: "fixed", label: "Fixed" },
+    { value: "flexible", label: "Flexible" },
+    { value: "batch_wise", label: "Batch Wise" },
+];
+
 export default function CreateAssessmentModal({ onClose, onSuccess }) {
 
     const [step, setStep] = useState(1);
@@ -21,17 +28,24 @@ export default function CreateAssessmentModal({ onClose, onSuccess }) {
         assessment_type_id: "",
         title: "",
         description: "",
+        scheduling_type: "fixed",
         publish_date: "",
         start_time: "",
         end_time: "",
+        start_date: "",
+        end_date: "",
+        duration_minutes: "",
         shuffle: false,
         is_library: false,
-        is_batch_wise: false,
         is_active: true,
         has_negative: false,
         negative_marks: 0,
         difficulty_level: "",
     });
+
+    const isBatchWise = form.scheduling_type === "batch_wise";
+    const isFixed = form.scheduling_type === "fixed";
+    const isFlexible = form.scheduling_type === "flexible";
 
     const validate = () => {
         const e = {};
@@ -46,35 +60,60 @@ export default function CreateAssessmentModal({ onClose, onSuccess }) {
             e.title = "Title cannot exceed 255 characters.";
         }
 
-        if (!form.publish_date) {
-            e.publish_date = "Publish date is required.";
-        }
+        if (isFixed) {
 
-        if (!form.start_time) {
-            e.start_time = "Start time is required.";
-        }
-
-        if (!form.end_time) {
-            e.end_time = "End time is required.";
-        }
-
-        if (form.start_time && form.end_time) {
-
-            const start = new Date(`2000-01-01 ${form.start_time}`);
-            const end = new Date(`2000-01-01 ${form.end_time}`);
-
-            if (end <= start) {
-                e.end_time = "End time must be after start time.";
+            if (!form.publish_date) {
+                e.publish_date = "Publish date is required.";
             }
 
-            const diff = (end - start) / (1000 * 60);
-
-            if (diff <= 0) {
-                e.end_time = "Duration must be greater than zero.";
+            if (!form.start_time) {
+                e.start_time = "Start time is required.";
             }
 
-            if (diff > 720) {
-                e.end_time = "Duration cannot exceed 12 hours.";
+            if (!form.end_time) {
+                e.end_time = "End time is required.";
+            }
+
+            if (form.start_time && form.end_time) {
+
+                const start = new Date(`2000-01-01 ${form.start_time}`);
+                const end = new Date(`2000-01-01 ${form.end_time}`);
+
+                if (end <= start) {
+                    e.end_time = "End time must be after start time.";
+                }
+
+                const diff = (end - start) / (1000 * 60);
+
+                if (diff <= 0) {
+                    e.end_time = "Duration must be greater than zero.";
+                }
+
+                if (diff > 720) {
+                    e.end_time = "Duration cannot exceed 12 hours.";
+                }
+            }
+
+        } else if (isFlexible) {
+
+            if (!form.start_date) {
+                e.start_date = "Start date is required.";
+            }
+
+            if (!form.end_date) {
+                e.end_date = "End date is required.";
+            }
+
+            if (
+                form.start_date &&
+                form.end_date &&
+                new Date(form.end_date) < new Date(form.start_date)
+            ) {
+                e.end_date = "End date must be on or after start date.";
+            }
+
+            if (!form.duration_minutes || Number(form.duration_minutes) <= 0) {
+                e.duration_minutes = "Duration is required.";
             }
         }
 
@@ -117,14 +156,31 @@ export default function CreateAssessmentModal({ onClose, onSuccess }) {
         try {
 
             const payload = {
-                ...form,
-                start_time: form.start_time
-                    ? `${form.start_time}:00`
-                    : null,
-                end_time: form.end_time
-                    ? `${form.end_time}:00`
-                    : null,
+                assessment_type_id: form.assessment_type_id,
+                title: form.title,
+                description: form.description,
+                scheduling_type: form.scheduling_type,
+                shuffle: form.shuffle,
+                is_library: form.is_library,
+                is_active: form.is_active,
+                has_negative: form.has_negative,
+                negative_marks: form.negative_marks,
+                difficulty_level: form.difficulty_level,
             };
+
+            if (isFixed) {
+                payload.publish_date = form.publish_date;
+                payload.start_time = form.start_time
+                    ? `${form.start_time}:00`
+                    : null;
+                payload.end_time = form.end_time
+                    ? `${form.end_time}:00`
+                    : null;
+            } else if (isFlexible) {
+                payload.start_date = form.start_date;
+                payload.end_date = form.end_date;
+                payload.duration_minutes = Number(form.duration_minutes);
+            }
 
             const res = await AssessmentService.createAssessment(payload);
 
@@ -138,7 +194,7 @@ export default function CreateAssessmentModal({ onClose, onSuccess }) {
             // assessment is nested under `data`, not at the top level.
             setAssessmentId(res.data.id);
 
-            if (form.is_batch_wise) {
+            if (isBatchWise) {
                 setStep(2); // Batch
             } else {
                 setBatchId(null);
@@ -211,7 +267,7 @@ export default function CreateAssessmentModal({ onClose, onSuccess }) {
                         1. Assessment
                     </span>
 
-                    {form.is_batch_wise && (
+                    {isBatchWise && (
                         <span className={step === 2 ? "text-red-600 font-semibold" : ""}>
                             2. Batch
                         </span>
@@ -220,7 +276,7 @@ export default function CreateAssessmentModal({ onClose, onSuccess }) {
                     <span
                         className={step === 3 ? "text-red-600 font-semibold" : ""}
                     >
-                        {form.is_batch_wise ? "3. Questions" : "2. Questions"}
+                        {isBatchWise ? "3. Questions" : "2. Questions"}
                     </span>
 
                 </div>
@@ -294,121 +350,241 @@ export default function CreateAssessmentModal({ onClose, onSuccess }) {
                                     )}
                                 </div>
 
-                                {/* Publish Date */}
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-xs text-gray-600">
-                                        Publish Date
-                                    </label>
-
-                                    <input
-                                        type="date"
-                                        className="border p-2 rounded"
-                                        onChange={(e) =>
-                                            setForm({
-                                                ...form,
-                                                publish_date: e.target.value,
-                                            })
-                                        }
-                                    />
-                                    {errors.publish_date && (
-                                        <p className="text-red-500 text-xs mt-1">
-                                            {errors.publish_date}
-                                        </p>
-                                    )}
-                                </div>
-
-                                {/* Start Time */}
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-xs text-gray-600">
-                                        Start Time
-                                    </label>
-
-                                    <input
-                                        type="time"
-                                        className="border p-2 rounded"
-                                        onChange={(e) => {
-
-                                            const value = e.target.value;
-
-                                            setForm((prev) => {
-
-                                                const updated = {
-                                                    ...prev,
-                                                    start_time: value,
-                                                };
-
-                                                setTotalMinutes(
-                                                    calculateDuration(
-                                                        updated.start_time,
-                                                        updated.end_time
-                                                    )
-                                                );
-
-                                                return updated;
-                                            });
-                                        }}
-                                    />
-                                    {errors.start_time && (
-                                        <p className="text-red-500 text-xs mt-1">
-                                            {errors.start_time}
-                                        </p>
-                                    )}
-                                </div>
-
-                                {/* End Time */}
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-xs text-gray-600">
-                                        End Time
-                                    </label>
-
-                                    <input
-                                        type="time"
-                                        className="border p-2 rounded"
-                                        onChange={(e) => {
-
-                                            const value = e.target.value;
-
-                                            setForm((prev) => {
-
-                                                const updated = {
-                                                    ...prev,
-                                                    end_time: value,
-                                                };
-
-                                                setTotalMinutes(
-                                                    calculateDuration(
-                                                        updated.start_time,
-                                                        updated.end_time
-                                                    )
-                                                );
-
-                                                return updated;
-                                            });
-                                        }}
-                                    />
-                                    {errors.end_time && (
-                                        <p className="text-red-500 text-xs mt-1">
-                                            {errors.end_time}
-                                        </p>
-                                    )}
-                                </div>
-
-                                {/* Duration */}
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-xs text-gray-600">
-                                        Total Duration (Minutes)
-                                    </label>
-
-                                    <input
-                                        type="number"
-                                        className="border p-2 rounded bg-gray-100 cursor-not-allowed"
-                                        value={totalMinutes}
-                                        disabled
-                                    />
-
-                                </div>
-
                             </div>
+
+                            {/* Scheduling Type */}
+                            <div className="flex flex-col gap-2 mt-4">
+                                <label className="text-xs text-gray-600">
+                                    Scheduling Type
+                                </label>
+
+                                <div className="flex gap-3">
+                                    {SCHEDULING_TYPES.map((opt) => (
+                                        <button
+                                            key={opt.value}
+                                            type="button"
+                                            onClick={() =>
+                                                setForm({
+                                                    ...form,
+                                                    scheduling_type: opt.value,
+                                                })
+                                            }
+                                            className={`px-4 py-2 rounded border text-sm transition
+                                                ${form.scheduling_type === opt.value
+                                                    ? "bg-purple-600 text-white border-purple-600"
+                                                    : "bg-white text-gray-700 hover:bg-purple-50"
+                                                }`}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Fixed schedule fields */}
+                            {isFixed && (
+                                <div className="grid grid-cols-2 gap-4 mt-4">
+
+                                    {/* Publish Date */}
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-xs text-gray-600">
+                                            Publish Date
+                                        </label>
+
+                                        <input
+                                            type="date"
+                                            className="border p-2 rounded"
+                                            onChange={(e) =>
+                                                setForm({
+                                                    ...form,
+                                                    publish_date: e.target.value,
+                                                })
+                                            }
+                                        />
+                                        {errors.publish_date && (
+                                            <p className="text-red-500 text-xs mt-1">
+                                                {errors.publish_date}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* Start Time */}
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-xs text-gray-600">
+                                            Start Time
+                                        </label>
+
+                                        <input
+                                            type="time"
+                                            className="border p-2 rounded"
+                                            onChange={(e) => {
+
+                                                const value = e.target.value;
+
+                                                setForm((prev) => {
+
+                                                    const updated = {
+                                                        ...prev,
+                                                        start_time: value,
+                                                    };
+
+                                                    setTotalMinutes(
+                                                        calculateDuration(
+                                                            updated.start_time,
+                                                            updated.end_time
+                                                        )
+                                                    );
+
+                                                    return updated;
+                                                });
+                                            }}
+                                        />
+                                        {errors.start_time && (
+                                            <p className="text-red-500 text-xs mt-1">
+                                                {errors.start_time}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* End Time */}
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-xs text-gray-600">
+                                            End Time
+                                        </label>
+
+                                        <input
+                                            type="time"
+                                            className="border p-2 rounded"
+                                            onChange={(e) => {
+
+                                                const value = e.target.value;
+
+                                                setForm((prev) => {
+
+                                                    const updated = {
+                                                        ...prev,
+                                                        end_time: value,
+                                                    };
+
+                                                    setTotalMinutes(
+                                                        calculateDuration(
+                                                            updated.start_time,
+                                                            updated.end_time
+                                                        )
+                                                    );
+
+                                                    return updated;
+                                                });
+                                            }}
+                                        />
+                                        {errors.end_time && (
+                                            <p className="text-red-500 text-xs mt-1">
+                                                {errors.end_time}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* Duration */}
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-xs text-gray-600">
+                                            Total Duration (Minutes)
+                                        </label>
+
+                                        <input
+                                            type="number"
+                                            className="border p-2 rounded bg-gray-100 cursor-not-allowed"
+                                            value={totalMinutes}
+                                            disabled
+                                        />
+
+                                    </div>
+
+                                </div>
+                            )}
+
+                            {/* Flexible schedule fields */}
+                            {isFlexible && (
+                                <div className="grid grid-cols-2 gap-4 mt-4">
+
+                                    {/* Start Date */}
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-xs text-gray-600">
+                                            Start Date
+                                        </label>
+
+                                        <input
+                                            type="date"
+                                            className="border p-2 rounded"
+                                            onChange={(e) =>
+                                                setForm({
+                                                    ...form,
+                                                    start_date: e.target.value,
+                                                })
+                                            }
+                                        />
+                                        {errors.start_date && (
+                                            <p className="text-red-500 text-xs mt-1">
+                                                {errors.start_date}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* End Date */}
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-xs text-gray-600">
+                                            End Date
+                                        </label>
+
+                                        <input
+                                            type="date"
+                                            className="border p-2 rounded"
+                                            onChange={(e) =>
+                                                setForm({
+                                                    ...form,
+                                                    end_date: e.target.value,
+                                                })
+                                            }
+                                        />
+                                        {errors.end_date && (
+                                            <p className="text-red-500 text-xs mt-1">
+                                                {errors.end_date}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* Duration Minutes */}
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-xs text-gray-600">
+                                            Duration Per Attempt (Minutes)
+                                        </label>
+
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            className="border p-2 rounded"
+                                            value={form.duration_minutes}
+                                            onChange={(e) =>
+                                                setForm({
+                                                    ...form,
+                                                    duration_minutes: e.target.value,
+                                                })
+                                            }
+                                        />
+                                        {errors.duration_minutes && (
+                                            <p className="text-red-500 text-xs mt-1">
+                                                {errors.duration_minutes}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                </div>
+                            )}
+
+                            {isBatchWise && (
+                                <p className="text-sm text-gray-500 mt-4">
+                                    Schedule will be set per batch in the next step.
+                                </p>
+                            )}
 
                             {/* Description */}
                             <div className="flex flex-col gap-1 mt-4">
@@ -482,19 +658,6 @@ export default function CreateAssessmentModal({ onClose, onSuccess }) {
                                     </p>
                                 )}
                             </div>
-                            <label className="flex items-center py-2 gap-2">
-                                <input
-                                    type="checkbox"
-                                    checked={form.is_batch_wise}
-                                    onChange={(e) =>
-                                        setForm({
-                                            ...form,
-                                            is_batch_wise: e.target.checked,
-                                        })
-                                    }
-                                />
-                                Batch Wise Assessment
-                            </label>
 
                             {/* Options */}
                             <div className="flex gap-6 mt-4 text-sm">
@@ -523,6 +686,34 @@ export default function CreateAssessmentModal({ onClose, onSuccess }) {
                                         }
                                     />
                                     Negative Marks
+                                </label>
+
+                                <label className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={form.is_library}
+                                        onChange={(e) =>
+                                            setForm({
+                                                ...form,
+                                                is_library: e.target.checked,
+                                            })
+                                        }
+                                    />
+                                    Add to Library
+                                </label>
+
+                                <label className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={form.is_active}
+                                        onChange={(e) =>
+                                            setForm({
+                                                ...form,
+                                                is_active: e.target.checked,
+                                            })
+                                        }
+                                    />
+                                    Active
                                 </label>
 
                             </div>
