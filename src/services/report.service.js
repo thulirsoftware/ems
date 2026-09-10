@@ -22,6 +22,11 @@ const ReportService = {
     const res = await http.get("/user/reports/progress", { params });
     return res.data;
   },
+
+  getQuestionsReport: async (params = {}) => {
+    const res = await http.get("/user/reports/questions", { params });
+    return res.data;
+  },
 };
 
 export default ReportService;

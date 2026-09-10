@@ -28,6 +28,13 @@ export default function RunningAssessmentDetails() {
 
   // ⏱ Duration
   const getDuration = () => {
+    if (exam.scheduling_type === "flexible") {
+      if (!exam.duration_minutes) return "N/A";
+      const hrs = Math.floor(exam.duration_minutes / 60);
+      const mins = exam.duration_minutes % 60;
+      return `${hrs} hr ${mins} min`;
+    }
+
     if (!exam.start_time || !exam.end_time) return "N/A";
 
     const start = new Date(`1970-01-01T${exam.start_time}`);
@@ -85,7 +92,7 @@ export default function RunningAssessmentDetails() {
         <p className="text-gray-600 mt-1">{exam.description}</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 border rounded-xl p-4 text-center text-sm">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-gray-50 border rounded-xl p-4 text-center text-sm">
         <div>
           <p className="text-gray-500">Duration</p>
           <p className="font-semibold">{getDuration()}</p>
@@ -104,11 +111,26 @@ export default function RunningAssessmentDetails() {
             {exam.shuffle ? "Yes" : "No"}
           </p>
         </div>
+
+        <div>
+          <p className="text-gray-500">Difficulty</p>
+          <p className="font-semibold capitalize">
+            {exam.difficulty_level || "N/A"}
+          </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-700">
-        <p><b>Date:</b> {exam.publish_date}</p>
-        <p><b>Time:</b> {exam.start_time} – {exam.end_time}</p>
+        {exam.scheduling_type === "flexible" ? (
+          <p className="md:col-span-2">
+            <b>Window:</b> {exam.start_date} – {exam.end_date}
+          </p>
+        ) : (
+          <>
+            <p><b>Date:</b> {exam.publish_date}</p>
+            <p><b>Time:</b> {exam.start_time} – {exam.end_time}</p>
+          </>
+        )}
       </div>
 
       <button

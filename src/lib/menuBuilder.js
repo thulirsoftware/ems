@@ -1,6 +1,5 @@
 import {
   LayoutDashboard,
-  Package,
   Users,
   BarChart3,
 } from "lucide-react";

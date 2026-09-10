@@ -8,7 +8,6 @@ export default function RunningAssessmentQuestions() {
     const { examid, attemptId } = useParams();
     const navigate = useNavigate();
 
-    const [examMeta, setExamMeta] = useState(null);
     const [questions, setQuestions] = useState([]);
     const [current, setCurrent] = useState(0);
     const [answers, setAnswers] = useState({});
@@ -38,7 +37,7 @@ export default function RunningAssessmentQuestions() {
     const calculateRemainingTime = (meta) => {
         if (!meta) return null;
 
-        if (!meta.is_flexible) {
+        if (meta.scheduling_type !== "flexible") {
             if (!meta.publish_date || !meta.end_time) return null;
             const examEnd = new Date(`${meta.publish_date}T${meta.end_time}`);
             const diff = Math.floor((examEnd - new Date()) / 1000);
@@ -52,7 +51,17 @@ export default function RunningAssessmentQuestions() {
                 startedAtMs = Date.now();
                 localStorage.setItem(key, String(startedAtMs));
             }
-            const deadline = startedAtMs + meta.duration_minutes * 60 * 1000;
+            let deadline = startedAtMs + meta.duration_minutes * 60 * 1000;
+
+            // Mirror the backend's flexible_attempt_deadline cap: the
+            // attempt can never run past the end of the assessment's
+            // allowed date range, even if duration_minutes would carry it
+            // further.
+            if (meta.end_date) {
+                const windowEnd = new Date(`${meta.end_date}T23:59:59`).getTime();
+                deadline = Math.min(deadline, windowEnd);
+            }
+
             const diff = Math.floor((deadline - Date.now()) / 1000);
             return diff > 0 ? diff : 0;
         }
@@ -75,7 +84,6 @@ export default function RunningAssessmentQuestions() {
                 ]);
 
                 if (cancelled) return;
-                setExamMeta(meta);
                 setQuestions(Array.isArray(data) ? data : []);
                 setTimeLeft(calculateRemainingTime(meta));
             } catch (err) {

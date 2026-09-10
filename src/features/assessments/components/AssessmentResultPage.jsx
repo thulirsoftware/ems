@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import AssessmentService from "../../../services/assesment.service";
 import QuestionAccordion from "./QuestionAccordion";
 
@@ -9,6 +10,7 @@ export default function AssessmentResultPage() {
 
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     if (examid) loadResult();
@@ -43,6 +45,30 @@ export default function AssessmentResultPage() {
 
       setLoading(false);
 
+    }
+  };
+
+  // The result endpoint paginates the question review (page_size 10), so an
+  // assessment with more questions than that needs the later pages fetched
+  // and appended to see the rest.
+  const loadMoreQuestions = async () => {
+    if (loadingMore || !result || result.current_page >= result.total_pages) return;
+
+    setLoadingMore(true);
+    try {
+      const nextPage = result.current_page + 1;
+      const res = await AssessmentService.GetAssessmentResult(examid, nextPage);
+      const data = res.data ?? res;
+
+      setResult((prev) => ({
+        ...data,
+        questions: [...prev.questions, ...data.questions],
+      }));
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load more questions.");
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -200,6 +226,16 @@ export default function AssessmentResultPage() {
               index={index}
             />
           ))}
+
+          {result.current_page < result.total_pages && (
+            <button
+              onClick={loadMoreQuestions}
+              disabled={loadingMore}
+              className="w-full py-3 rounded-xl border border-blue-200 text-blue-600 font-semibold hover:bg-blue-50 transition disabled:opacity-60"
+            >
+              {loadingMore ? "Loading..." : "Load More Questions"}
+            </button>
+          )}
         </div>
       </div>
     </section>

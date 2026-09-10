@@ -126,6 +126,26 @@ export default function Dashboard() {
         <UpcomingExams exams={dashboard?.upcoming} loading={loading} />
       </div>
 
+      {/* ACTIONABLE EXAMS: available to take right now, or resume in progress */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-8">
+        <UpcomingExams
+          exams={dashboard?.in_progress}
+          loading={loading}
+          title="Continue Exam"
+          emptyMessage="No exams in progress"
+          iconColor="text-amber-600"
+          iconBg="bg-amber-100"
+        />
+        <UpcomingExams
+          exams={dashboard?.available_now}
+          loading={loading}
+          title="Available Now"
+          emptyMessage="No exams available right now"
+          iconColor="text-emerald-600"
+          iconBg="bg-emerald-100"
+        />
+      </div>
+
       <div className="mt-8">
         <PerformanceSummary stats={results} loading={loading} />
       </div>

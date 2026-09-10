@@ -62,10 +62,24 @@ export default function AssessmentCard({ exam, variant = "today", onAction }) {
       )}
 
       <div className="text-sm text-gray-600 space-y-1">
-        <p>📅 Date: {exam.publish_date || "-"}</p>
-        <p>
-          ⏰ Time: {exam.start_time || "-"} - {exam.end_time || "-"}
-        </p>
+        {exam.scheduling_type === "flexible" ? (
+          <>
+            <p>📅 Window: {exam.start_date || "-"} - {exam.end_date || "-"}</p>
+            {exam.duration_minutes && (
+              <p>⏰ Duration: {exam.duration_minutes} min</p>
+            )}
+          </>
+        ) : (
+          <>
+            <p>📅 Date: {exam.publish_date || "-"}</p>
+            <p>
+              ⏰ Time: {exam.start_time || "-"} - {exam.end_time || "-"}
+            </p>
+          </>
+        )}
+        {exam.difficulty_level && (
+          <p>🎯 Difficulty: <span className="capitalize">{exam.difficulty_level}</span></p>
+        )}
         {variant === "running" && (
           <p>❌ Negative Marking: {exam.has_negative ? "Yes" : "No"}</p>
         )}
