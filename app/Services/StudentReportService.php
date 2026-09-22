@@ -1,0 +1,260 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\AssessmentAssignment;
+use App\Models\AssessmentAttempt;
+use App\Models\AssessmentQuestion;
+use App\Models\Batch;
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
+
+class StudentReportService
+{
+    public function validateFilters(array $data): array
+    {
+        return Validator::make($data, [
+            'assessment_id' => 'nullable|exists:assessments,id',
+            'batch_id' => 'nullable|exists:batches,id',
+            'status' => 'nullable|in:in_progress,pending_evaluation,evaluated',
+            'passing_percentage' => 'nullable|numeric|min:0|max:100',
+            'from' => 'nullable|date',
+            'to' => 'nullable|date|after_or_equal:from',
+            'page' => 'nullable|integer|min:1',
+            'page_size' => 'nullable|integer|min:1|max:200',
+        ])->validate();
+    }
+
+    private function scopedAttempts(int $userId, array $validated)
+    {
+        $query = AssessmentAttempt::where('user_id', $userId)
+            ->with(['assessment:id,title,assessment_type_id,scheduling_type', 'assessment.type:id,slug']);
+
+        if (!empty($validated['assessment_id'])) {
+            $query->where('assessment_id', $validated['assessment_id']);
+        }
+
+        if (!empty($validated['batch_id'])) {
+            $query->where('batch_id', $validated['batch_id']);
+        }
+
+        if (!empty($validated['from'])) {
+            $query->whereDate('created_at', '>=', $validated['from']);
+        }
+
+        if (!empty($validated['to'])) {
+            $query->whereDate('created_at', '<=', $validated['to']);
+        }
+
+        $attempts = $query->get();
+
+        if (!empty($validated['status'])) {
+            $attempts = $attempts->filter(fn ($attempt) => attempt_status($attempt, attempt_result($attempt)) === $validated['status'])->values();
+        }
+
+        return $attempts;
+    }
+
+    private function scopedAssignments(int $userId, array $validated)
+    {
+        $query = AssessmentAssignment::where('user_id', $userId);
+
+        if (!empty($validated['assessment_id'])) {
+            $query->where('assessment_id', $validated['assessment_id']);
+        }
+
+        if (!empty($validated['batch_id'])) {
+            $query->where('batch_id', $validated['batch_id']);
+        }
+
+        return $query->get();
+    }
+
+    public function summary(User $user, array $data): array
+    {
+        $validated = $this->validateFilters($data);
+        $passing = passing_percentage($validated);
+
+        $attempts = $this->scopedAttempts($user->id, $validated);
+        $assignments = $this->scopedAssignments($user->id, $validated);
+        $submitted = $attempts->filter(fn ($attempt) => $attempt->submitted_at !== null);
+
+        return [
+            'filters' => applied_filters($validated),
+            'passing_percentage' => $passing,
+            'totals' => [
+                'assigned' => $assignments->count(),
+                'assessments' => $assignments->pluck('assessment_id')->unique()->count(),
+            ],
+            'attempts' => [
+                'total' => $attempts->count(),
+                'in_progress' => $attempts->count() - $submitted->count(),
+                'submitted' => $submitted->count(),
+                'pending_evaluation' => $submitted->where('score', 'Pending Evaluation')->count(),
+            ],
+            'participation' => [
+                'assigned' => $assignments->count(),
+                'attempted' => $attempts->count(),
+                'not_attempted' => max(0, $assignments->count() - $attempts->count()),
+                'participation_rate' => $assignments->count() > 0 ? round(($attempts->count() / $assignments->count()) * 100) : 0,
+            ],
+            'performance' => score_performance($attempts, $passing),
+            'score_distribution' => score_distribution($attempts),
+        ];
+    }
+
+    public function assessments(User $user, array $data): array
+    {
+        $validated = $this->validateFilters($data);
+        $passing = passing_percentage($validated);
+
+        $attempts = $this->scopedAttempts($user->id, $validated);
+        $assignments = $this->scopedAssignments($user->id, $validated)->groupBy('assessment_id');
+
+        $rows = $attempts->groupBy('assessment_id')->map(function ($own, $assessmentId) use ($assignments, $passing) {
+            $first = $own->first();
+            $submitted = $own->filter(fn ($attempt) => $attempt->submitted_at !== null);
+
+            return [
+                'assessment_id' => (int) $assessmentId,
+                'assessment_title' => $first->assessment?->title,
+                'type' => $first->assessment?->type?->slug,
+                'assigned' => $assignments->get($assessmentId, collect())->count(),
+                'attempts' => $own->count(),
+                'in_progress' => $own->count() - $submitted->count(),
+                'submitted' => $submitted->count(),
+                'pending_evaluation' => $submitted->where('score', 'Pending Evaluation')->count(),
+                ...score_performance($own, $passing),
+            ];
+        })->sortByDesc('average_percentage')->values();
+
+        return ['filters' => applied_filters($validated), 'passing_percentage' => $passing, ...paginate_rows($rows, $validated)];
+    }
+
+    public function attempts(User $user, array $data): array
+    {
+        $validated = $this->validateFilters($data);
+        $passing = passing_percentage($validated);
+
+        $attempts = $this->scopedAttempts($user->id, $validated);
+        $batches = Batch::whereIn('id', $attempts->pluck('batch_id')->filter()->unique())->get()->keyBy('id');
+
+        $rows = $attempts->sortByDesc('id')->map(function ($attempt) use ($batches, $passing) {
+            $result = attempt_result($attempt);
+            $percentage = $result['percentage'] ?? null;
+            $batch = $batches->get($attempt->batch_id);
+            $hideBatch = is_implicit_batch($attempt->assessment, $batch);
+
+            return [
+                'attempt_id' => $attempt->id,
+                'assessment_id' => $attempt->assessment_id,
+                'assessment_title' => $attempt->assessment?->title,
+                'type' => $attempt->assessment?->type?->slug,
+                'batch_id' => $hideBatch ? null : $attempt->batch_id,
+                'batch_name' => $hideBatch ? null : $batch?->name,
+                'attempt_date' => $attempt->created_at?->toDateString(),
+                'started_at' => $attempt->started_at,
+                'submitted_at' => $attempt->submitted_at,
+                'status' => attempt_status($attempt, $result),
+                'score' => $result['score'] ?? null,
+                'total_marks' => $result['total'] ?? null,
+                'percentage' => $percentage,
+                'passed' => $percentage === null ? null : $percentage >= $passing,
+            ];
+        })->values();
+
+        return ['filters' => applied_filters($validated), 'passing_percentage' => $passing, ...paginate_rows($rows, $validated)];
+    }
+
+    public function questions(User $user, array $data): array
+    {
+        $validated = $this->validateFilters($data);
+
+        $attempts = $this->scopedAttempts($user->id, $validated)->filter(fn ($attempt) => $attempt->submitted_at !== null);
+        $attemptsById = $attempts->keyBy('id');
+        $batches = Batch::whereIn('id', $attempts->pluck('batch_id')->filter()->unique())->get()->keyBy('id');
+
+        $answers = DB::table('assessment_answers')->whereIn('attempt_id', $attempts->pluck('id'))->whereNull('deleted_at')->get();
+        $questions = AssessmentQuestion::whereIn('id', $answers->pluck('question_id')->unique())->get()->keyBy('id');
+
+        $rows = $answers->map(function ($answer) use ($questions, $attemptsById, $batches) {
+            $question = $questions->get($answer->question_id);
+            $attempt = $attemptsById->get($answer->attempt_id);
+            $hideBatch = $attempt && is_implicit_batch($attempt->assessment, $batches->get($attempt->batch_id));
+
+            return [
+                'attempt_id' => $answer->attempt_id,
+                'assessment_id' => $attempt?->assessment_id,
+                'assessment_title' => $attempt?->assessment?->title,
+                'batch_id' => $hideBatch ? null : $attempt?->batch_id,
+                'question_id' => $answer->question_id,
+                'question_text' => $question?->question_text,
+                'type' => $question?->type,
+                'order' => $question?->order,
+                'answer' => json_decode($answer->answer, true),
+                'is_correct' => $answer->is_correct === null ? null : (bool) $answer->is_correct,
+                'graded' => $answer->is_correct !== null,
+            ];
+        })->sortBy([['assessment_id', 'asc'], ['order', 'asc']])->values();
+
+        $graded = $rows->where('graded', true);
+
+        return [
+            'filters' => applied_filters($validated),
+            'totals' => [
+                'answers' => $rows->count(),
+                'graded' => $graded->count(),
+                'correct' => $graded->where('is_correct', true)->count(),
+                'wrong' => $graded->where('is_correct', false)->count(),
+                'accuracy' => $graded->count() > 0 ? round(($graded->where('is_correct', true)->count() / $graded->count()) * 100) : 0,
+            ],
+            ...paginate_rows($rows, $validated),
+        ];
+    }
+
+    public function progress(User $user, array $data): array
+    {
+        $validated = $this->validateFilters($data);
+        $passing = passing_percentage($validated);
+
+        $attempts = $this->scopedAttempts($user->id, $validated)->sortBy('id');
+        $batches = Batch::whereIn('id', $attempts->pluck('batch_id')->filter()->unique())->get()->keyBy('id');
+
+        $running = [];
+        $rows = [];
+
+        foreach ($attempts as $attempt) {
+            $result = attempt_result($attempt);
+
+            if (!$result) {
+                continue;
+            }
+
+            $running[] = $result['percentage'];
+
+            $rows[] = [
+                'attempt_id' => $attempt->id,
+                'assessment_id' => $attempt->assessment_id,
+                'assessment_title' => $attempt->assessment?->title,
+                'batch_id' => is_implicit_batch($attempt->assessment, $batches->get($attempt->batch_id)) ? null : $attempt->batch_id,
+                'attempt_date' => $attempt->created_at?->toDateString(),
+                'submitted_at' => $attempt->submitted_at,
+                'score' => $result['score'],
+                'total_marks' => $result['total'],
+                'percentage' => $result['percentage'],
+                'passed' => $result['percentage'] >= $passing,
+                'running_average' => round(array_sum($running) / count($running)),
+            ];
+        }
+
+        $rows = collect($rows);
+
+        return [
+            'filters' => applied_filters($validated),
+            'passing_percentage' => $passing,
+            'trend' => $rows->count() > 1 ? round($rows->last()['percentage'] - $rows->first()['percentage']) : 0,
+            ...paginate_rows($rows, $validated),
+        ];
+    }
+}

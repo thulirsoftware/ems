@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\User\AssessmentAttemptController;
+use App\Http\Controllers\Api\User\UserAIController;
 use App\Http\Controllers\Api\User\UserAssessmentController;
 use App\Http\Controllers\Api\User\UserAuthController;
 use App\Http\Controllers\Api\User\UserDashboardController;
@@ -61,5 +62,15 @@ Route::prefix('user')->middleware('user')->group(function () {
     // Notifications
     Route::get('notifications', [UserNotificationController::class, 'index']);
     Route::post('notifications/read-all', [UserNotificationController::class, 'markAllRead']);
+
+    // AI assistant
+    Route::prefix('ai')->group(function () {
+        Route::post('conversations', [UserAIController::class, 'createConversation']);
+        Route::get('conversations', [UserAIController::class, 'conversations']);
+        Route::get('conversations/{conversation}', [UserAIController::class, 'conversation']);
+        Route::delete('conversations/{conversation}', [UserAIController::class, 'deleteConversation']);
+        Route::post('conversations/{conversation}/chat', [UserAIController::class, 'chat'])
+            ->middleware('throttle:20,1');
+    });
 
 });

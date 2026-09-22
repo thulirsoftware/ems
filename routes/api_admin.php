@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Admin\AdminAIController;
 use App\Http\Controllers\Api\Admin\AdminAuthController;
 use App\Http\Controllers\Api\Admin\AdminBatchController;
 use App\Http\Controllers\Api\Admin\AdminDashboardController;
@@ -114,4 +115,16 @@ Route::prefix('admin')->middleware('admin')->group(function () {
     Route::get('results/{assessment_id}/user/{user_id}/answers', [AdminResultController::class, 'userAnswersForGrading']);
     Route::post('results/{assessment_id}/user/{user_id}/question/{question_id}/grade', [AdminResultController::class, 'gradeAnswer']);
     Route::get('results/{assessment_id}/rank-list', [AdminResultController::class, 'rankList']);
+});
+
+// Admin AI assistant
+Route::prefix('admin')->middleware('admin')->group(function () {
+    Route::prefix('ai')->group(function () {
+        Route::post('conversations', [AdminAIController::class, 'createConversation']);
+        Route::get('conversations', [AdminAIController::class, 'conversations']);
+        Route::get('conversations/{conversation}', [AdminAIController::class, 'conversation']);
+        Route::delete('conversations/{conversation}', [AdminAIController::class, 'deleteConversation']);
+        Route::post('conversations/{conversation}/chat', [AdminAIController::class, 'chat'])
+            ->middleware('throttle:20,1');
+    });
 });

@@ -3,251 +3,69 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Batch;
-use App\Models\Assessment;
-use App\Models\AssessmentAssignment;
-use App\Models\User;
-use App\Models\AssessmentAttempt;
+use App\Services\BatchService;
 use Illuminate\Http\Request;
 
 class AdminBatchController extends Controller
 {
-    private function isBatchLocked($batch_id)
-    {
-        return AssessmentAttempt::where('batch_id', $batch_id)->exists();
-    }
-
-    // Batch CRUD only ever manages explicitly-created batches belonging to
-    // batch_wise assessments. Fixed/flexible assessments each carry a single
-    // implicit batch that's managed through the Assessment APIs instead
-    // (see AssessmentController) and must stay invisible here.
-    private function findManageableBatch($admin, $id)
-    {
-        return Batch::batchWiseOnly()
-            ->where('id', $id)
-            ->whereHas('assessment', function ($q) use ($admin) {
-                $q->where('admin_id', $admin->id);
-            })
-            ->firstOrFail();
-    }
+    public function __construct(
+        private BatchService $batchService
+    ) {}
 
     public function index(Request $request)
     {
-        $admin = $request->user('admins');
-
-        return response()->json(
-            Batch::batchWiseOnly()
-                ->whereHas('assessment', function ($q) use ($admin) {
-                    $q->where('admin_id', $admin->id);
-                })
-                ->get()
-        );
+        return response()->json($this->batchService->list($request->user('admins')));
     }
 
     public function getBatchesByAssessment(Request $request, $assessment_id)
     {
-        $admin = $request->user('admins');
-
-        $assessment = Assessment::where('id', $assessment_id)
-            ->where('admin_id', $admin->id)
-            ->firstOrFail();
-
-        if ($assessment->scheduling_type !== Assessment::SCHEDULING_BATCH_WISE) {
-            return response()->json([
-                'message' => 'Batches are only managed via this endpoint for batch_wise assessments'
-            ], 422);
-        }
-
-        $batches = Batch::where('assessment_id', $assessment->id)->get();
-
-        return response()->json($batches);
+        return response()->json($this->batchService->listByAssessment($request->user('admins'), $assessment_id));
     }
 
     public function store(Request $request)
     {
-        $admin = $request->user('admins');
-
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'publish_date' => 'required|date',
-            'start_time' => 'required|date_format:H:i:s',
-            'end_time' => 'required|date_format:H:i:s|after:start_time',
-            'assessment_id' => 'required|exists:assessments,id',
-            'capacity' => 'required|integer|min:1',
-        ]);
-
-        $assessment = Assessment::where('id', $validated['assessment_id'])
-            ->where('admin_id', $admin->id)
-            ->firstOrFail();
-
-        if ($assessment->scheduling_type !== Assessment::SCHEDULING_BATCH_WISE) {
-            return response()->json([
-                'message' => 'Batches can only be created for batch_wise assessments'
-            ], 422);
-        }
-
-        $conflict = Batch::where('assessment_id', $assessment->id)
-            ->whereDate('publish_date', $validated['publish_date'])
-            ->where(function ($q) use ($validated) {
-                $q->where('start_time', '<', $validated['end_time'])
-                    ->where('end_time', '>', $validated['start_time']);
-            })
-            ->exists();
-
-        if ($conflict) {
-            return response()->json(['message' => 'Batch time conflict'], 422);
-        }
-
-        return response()->json(Batch::create($validated), 201);
+        return response()->json($this->batchService->create($request->user('admins'), $request->all()), 201);
     }
 
     public function show(Request $request, $id)
     {
-        $batch = $this->findManageableBatch($request->user('admins'), $id);
-
-        return response()->json($batch);
+        return response()->json($this->batchService->get($request->user('admins'), $id));
     }
 
     public function update(Request $request, $id)
     {
-        $admin = $request->user('admins');
-
-        $batch = $this->findManageableBatch($admin, $id);
-
-        if ($this->isBatchLocked($batch->id)) {
-            return response()->json([
-                'message' => 'Cannot modify batch after it has been attempted'
-            ], 403);
-        }
-
-        $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255',
-            'publish_date' => 'nullable|date',
-            'start_time' => 'nullable|date_format:H:i:s',
-            'end_time' => 'nullable|date_format:H:i:s',
-            'capacity' => 'sometimes|required|integer|min:1',
-        ]);
-
-        $start = $validated['start_time'] ?? $batch->start_time;
-        $end = $validated['end_time'] ?? $batch->end_time;
-        $date = $validated['publish_date'] ?? $batch->publish_date;
-
-        if ($start && $end && $end <= $start) {
-            return response()->json(['message' => 'end_time must be after start_time'], 422);
-        }
-
-        $conflict = Batch::where('assessment_id', $batch->assessment_id)
-            ->whereDate('publish_date', $date)
-            ->where('id', '!=', $batch->id)
-            ->where(function ($q) use ($start, $end) {
-                $q->where('start_time', '<', $end)
-                    ->where('end_time', '>', $start);
-            })
-            ->exists();
-
-        if ($conflict) {
-            return response()->json(['message' => 'Batch time conflict'], 422);
-        }
-
-        $batch->update($validated);
-
-        return response()->json($batch);
+        return response()->json($this->batchService->update($request->user('admins'), $id, $request->all()));
     }
 
     public function destroy(Request $request, $id)
     {
-        $admin = $request->user('admins');
-
-        $batch = $this->findManageableBatch($admin, $id);
-
-        if ($this->isBatchLocked($batch->id)) {
-            return response()->json([
-                'message' => 'Cannot delete batch after it has been attempted'
-            ], 403);
-        }
-
-        $batch->delete();
+        $this->batchService->delete($request->user('admins'), $id);
 
         return response()->json(['message' => 'Batch deleted']);
     }
 
     public function getUsersByBatchId(Request $request, $id)
     {
-        $batch = $this->findManageableBatch($request->user('admins'), $id);
-
-        $users = User::whereIn(
-            'id',
-            AssessmentAssignment::where('batch_id', $batch->id)
-                ->pluck('user_id')
-        )->get();
-
-        return response()->json($users);
+        return response()->json($this->batchService->listUsers($request->user('admins'), $id));
     }
 
     public function addUsers(Request $request, $id)
     {
-        $admin = $request->user('admins');
+        $result = $this->batchService->addUsers($request->user('admins'), $id, $request->all());
 
-        $batch = $this->findManageableBatch($admin, $id);
-
-        if ($this->isBatchLocked($batch->id)) {
-            return response()->json([
-                'message' => 'Cannot add users after batch has started'
-            ], 403);
-        }
-
-        $validated = $request->validate([
-            'user_ids' => 'required|array',
-            'user_ids.*' => 'exists:users,id',
-        ]);
-
-        // correct capacity check (no duplicates)
-        $currentUsers = AssessmentAssignment::where('batch_id', $batch->id)
-            ->pluck('user_id')
-            ->toArray();
-
-        $newUsers = array_diff($validated['user_ids'], $currentUsers);
-
-        if ($batch->capacity && (count($currentUsers) + count($newUsers)) > $batch->capacity) {
-            return response()->json(['message' => 'Capacity exceeded'], 422);
-        }
-
-        $assignmentController = app(AssessmentAssignmentController::class);
-
-        $request->merge([
-            'assessment_id' => $batch->assessment_id,
-            'user_ids' => $validated['user_ids'],
-            'batch_id' => $batch->id,
-        ]);
-
-        return $assignmentController->store($request);
+        return response()->json([
+            'message' => 'Assignment completed',
+            ...$result,
+        ], 201);
     }
 
     public function removeUsers(Request $request, $id)
     {
-        $admin = $request->user('admins');
+        $deleted = $this->batchService->removeUsers($request->user('admins'), $id, $request->all());
 
-        $batch = $this->findManageableBatch($admin, $id);
-
-        if ($this->isBatchLocked($batch->id)) {
-            return response()->json([
-                'message' => 'Cannot remove users after batch has started'
-            ], 403);
-        }
-
-        $validated = $request->validate([
-            'user_ids' => 'required|array',
-            'user_ids.*' => 'exists:users,id',
+        return response()->json([
+            'message' => 'Users unassigned successfully',
+            'deleted_count' => $deleted,
         ]);
-
-        $assignmentController = app(AssessmentAssignmentController::class);
-
-        $request->merge([
-            'assessment_id' => $batch->assessment_id,
-            'user_ids' => $validated['user_ids'],
-            'batch_id' => $batch->id,
-        ]);
-
-        return $assignmentController->destroy($request);
     }
 }

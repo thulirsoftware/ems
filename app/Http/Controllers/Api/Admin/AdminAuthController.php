@@ -4,51 +4,29 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\Admin;
-use Illuminate\Support\Facades\Hash;
+use App\Services\AdminAccountService;
 
 class AdminAuthController extends Controller
 {
+    public function __construct(
+        private AdminAccountService $adminAccountService
+    ) {}
+
     public function register(Request $request)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:admins,email',
-            'password' => 'required|string|min:8',
-        ]);
-
-        $admin = Admin::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
-        ]);
-
-        return response()->json($admin, 201);
+        return response()->json($this->adminAccountService->create($request->all()), 201);
     }
 
     public function login(Request $request)
     {
-        $validated = $request->validate([
-            'email' => 'required|email',
-            'password' => 'required|string|min:8',
-        ]);
-
-        $admin = Admin::where('email', $validated['email'])
-            ->whereNull('deleted_at')
-            ->first();
-
-        if (!$admin || !Hash::check($validated['password'], $admin->password)) {
-            return response()->json(['message' => 'Invalid credentials'], 401);
-        }
-
-        $token = $admin->createToken('admin-token')->accessToken;
+        $result = $this->adminAccountService->login($request->all());
 
         return response()->json([
-            'admin' => $admin,
-            'token' => $token
+            'admin' => $result['admin'],
+            'token' => $result['token'],
         ])->cookie(
                 'admin_access_token',
-                $token,
+                $result['token'],
                 60 * 24 * 30, // 30 days
                 '/',
                 null,
@@ -59,7 +37,7 @@ class AdminAuthController extends Controller
 
     public function logout(Request $request)
     {
-        $request->user('admins')->token()->revoke();
+        $this->adminAccountService->logout($request->user('admins'));
 
         return response()->json([
             'message' => 'Logged out successfully'

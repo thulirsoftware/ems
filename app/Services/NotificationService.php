@@ -38,6 +38,14 @@ class NotificationService
         ]);
     }
 
+    public static function listUnreadForUser(int $userId)
+    {
+        return Notification::where('user_id', $userId)
+            ->where('is_read', false)
+            ->latest()
+            ->get();
+    }
+
     public static function markAsRead(int $notificationId): void
     {
         Notification::where('id', $notificationId)
