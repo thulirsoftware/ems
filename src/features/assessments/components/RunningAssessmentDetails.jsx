@@ -63,9 +63,6 @@ export default function RunningAssessmentDetails() {
         throw new Error("Attempt ID not found");
       }
 
-      // optional resume support
-      localStorage.setItem("running_attempt", attemptId);
-
       // The questions screen re-fetches assessment details itself (it needs
       // to survive a page refresh, which route state does not), so no state
       // needs to be passed here.

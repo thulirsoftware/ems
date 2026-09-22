@@ -23,6 +23,14 @@ export const useAuthStore = create((set) => {
     logout: () => {
       localStorage.removeItem("token");
       localStorage.removeItem("admin");
+
+      // Clean up any abandoned exam-attempt deadline anchors (see
+      // RunningAssessmentQuestions.jsx) left behind by attempts that were
+      // never submitted.
+      Object.keys(localStorage)
+        .filter((key) => key.startsWith("attempt_start_"))
+        .forEach((key) => localStorage.removeItem(key));
+
       set({ token: null, admin: null, isAuthenticated: false });
     },
   };

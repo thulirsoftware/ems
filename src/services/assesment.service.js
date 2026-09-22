@@ -44,7 +44,7 @@ const AssessmentService = {
     const res = await http.post(`/user/assessments/${id}/start`);
     return res.data;
   },
-  SaveAnswer: async (assessmentId, payload) => {
+  SaveAnswer: async (assessmentId, payload, config = {}) => {
     /**
      payload format:
      {
@@ -54,7 +54,8 @@ const AssessmentService = {
      */
     const res = await http.post(
       `/user/assessments/${assessmentId}/answer`,
-      payload
+      payload,
+      config
     );
     return res.data;
   },

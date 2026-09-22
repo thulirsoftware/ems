@@ -17,7 +17,19 @@ export default function RunningAssessmentQuestions() {
     const [submitting, setSubmitting] = useState(false);
     const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
 
+    // Debounce timers for in-flight text-answer autosaves, keyed by question id.
     const answerTimers = useRef({});
+    // Latest not-yet-saved text per question, so submit can flush it immediately
+    // instead of losing it to a debounce timer that hasn't fired yet.
+    const pendingTextAnswers = useRef({});
+    // Cancels a question's previous in-flight MCQ save when a newer one starts,
+    // so a fast "changed my mind" re-click can't have its response overtaken by
+    // the earlier click's response landing later.
+    const optionAbortControllers = useRef({});
+    // Absolute deadline (epoch ms) the countdown is measured against, so the
+    // displayed time is recomputed from wall-clock time on every tick instead
+    // of drifting under throttled/backgrounded-tab timers.
+    const deadlineRef = useRef(null);
 
     /* --------------------------------------------------
        CALCULATE REMAINING TIME
@@ -37,36 +49,41 @@ export default function RunningAssessmentQuestions() {
     const calculateRemainingTime = (meta) => {
         if (!meta) return null;
 
+        let deadlineMs = null;
+
         if (meta.scheduling_type !== "flexible") {
             if (!meta.publish_date || !meta.end_time) return null;
-            const examEnd = new Date(`${meta.publish_date}T${meta.end_time}`);
-            const diff = Math.floor((examEnd - new Date()) / 1000);
-            return diff > 0 ? diff : 0;
-        }
 
-        if (meta.duration_minutes) {
+            const examEnd = new Date(`${meta.publish_date}T${meta.end_time}`);
+            if (Number.isNaN(examEnd.getTime())) return null;
+
+            deadlineMs = examEnd.getTime();
+        } else if (meta.duration_minutes) {
             const key = `attempt_start_${attemptId}`;
             let startedAtMs = Number(localStorage.getItem(key)) || 0;
             if (!startedAtMs) {
                 startedAtMs = Date.now();
                 localStorage.setItem(key, String(startedAtMs));
             }
-            let deadline = startedAtMs + meta.duration_minutes * 60 * 1000;
+            deadlineMs = startedAtMs + meta.duration_minutes * 60 * 1000;
 
             // Mirror the backend's flexible_attempt_deadline cap: the
             // attempt can never run past the end of the assessment's
             // allowed date range, even if duration_minutes would carry it
             // further.
             if (meta.end_date) {
-                const windowEnd = new Date(`${meta.end_date}T23:59:59`).getTime();
-                deadline = Math.min(deadline, windowEnd);
+                const windowEnd = new Date(`${meta.end_date}T23:59:59`);
+                if (!Number.isNaN(windowEnd.getTime())) {
+                    deadlineMs = Math.min(deadlineMs, windowEnd.getTime());
+                }
             }
-
-            const diff = Math.floor((deadline - Date.now()) / 1000);
-            return diff > 0 ? diff : 0;
+        } else {
+            return null;
         }
 
-        return null;
+        deadlineRef.current = deadlineMs;
+        const diff = Math.floor((deadlineMs - Date.now()) / 1000);
+        return diff > 0 ? diff : 0;
     };
 
     /* --------------------------------------------------
@@ -105,7 +122,10 @@ export default function RunningAssessmentQuestions() {
     }, [examid]);
 
     /* --------------------------------------------------
-       TIMER RUNNER
+       TIMER RUNNER — recomputes remaining time from the absolute deadline
+       on every tick (rather than decrementing a counter), so a throttled or
+       backgrounded tab self-corrects instead of drifting ahead of the real
+       deadline.
     -------------------------------------------------- */
     useEffect(() => {
         if (timeLeft === null) return;
@@ -115,18 +135,41 @@ export default function RunningAssessmentQuestions() {
             return;
         }
 
-        const timer = setInterval(() => {
-            setTimeLeft((t) => (t === null ? t : t - 1));
-        }, 1000);
+        const tick = () => {
+            if (deadlineRef.current === null) {
+                setTimeLeft((t) => (t === null ? t : Math.max(0, t - 1)));
+                return;
+            }
 
+            const remaining = Math.floor((deadlineRef.current - Date.now()) / 1000);
+            setTimeLeft(remaining > 0 ? remaining : 0);
+        };
+
+        const timer = setInterval(tick, 1000);
         return () => clearInterval(timer);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [timeLeft]);
 
+    // Re-sync the countdown the instant the tab regains focus, instead of
+    // waiting for the next (possibly throttled) interval tick.
+    useEffect(() => {
+        const handleVisibility = () => {
+            if (document.hidden || deadlineRef.current === null) return;
+
+            const remaining = Math.floor((deadlineRef.current - Date.now()) / 1000);
+            setTimeLeft(remaining > 0 ? remaining : 0);
+        };
+
+        document.addEventListener("visibilitychange", handleVisibility);
+        return () => document.removeEventListener("visibilitychange", handleVisibility);
+    }, []);
+
     useEffect(() => {
         const timers = answerTimers.current;
+        const controllers = optionAbortControllers.current;
         return () => {
             Object.values(timers).forEach(clearTimeout);
+            Object.values(controllers).forEach((controller) => controller.abort());
         };
     }, []);
 
@@ -144,53 +187,99 @@ export default function RunningAssessmentQuestions() {
     }, []);
 
     const reportSaveError = (err) => {
+        if (err.name === "CanceledError" || err.code === "ERR_CANCELED") return;
+
         const message = err.response?.data?.message;
+        const isExpired = err.response?.status === 403;
+
         toast.error(
             message ||
-                (err.response?.status === 403
+                (isExpired
                     ? "This assessment is no longer accepting answers."
                     : "Failed to save your answer.")
         );
+
+        // The backend has already closed the window — stop letting the
+        // student keep trying and finalize the attempt now rather than
+        // waiting for the client-side timer to catch up.
+        if (isExpired) {
+            submitExam(true);
+        }
     };
 
     /* --------------------------------------------------
-       ANSWER SELECT (MCQ) — safe to call repeatedly, backend upserts
+       ANSWER SELECT (MCQ) — safe to call repeatedly, backend upserts.
+       Cancels the previous in-flight save for the same question so a rapid
+       re-selection can't have its request overtaken by an earlier one.
     -------------------------------------------------- */
     const handleOptionSelect = async (questionId, optionId) => {
         setAnswers((prev) => ({
             ...prev,
             [questionId]: optionId,
         }));
+
+        optionAbortControllers.current[questionId]?.abort();
+        const controller = new AbortController();
+        optionAbortControllers.current[questionId] = controller;
+
         try {
-            await AssessmentService.SaveAnswer(examid, {
-                question_id: questionId,
-                choice_id: optionId,
-            });
+            await AssessmentService.SaveAnswer(
+                examid,
+                { question_id: questionId, choice_id: optionId },
+                { signal: controller.signal }
+            );
         } catch (err) {
             reportSaveError(err);
+        } finally {
+            if (optionAbortControllers.current[questionId] === controller) {
+                delete optionAbortControllers.current[questionId];
+            }
         }
     };
 
     /* --------------------------------------------------
        TEXT ANSWER — debounced autosave (previously fired on every keystroke)
     -------------------------------------------------- */
+    const saveTextAnswer = async (questionId, text) => {
+        try {
+            await AssessmentService.SaveAnswer(examid, {
+                question_id: questionId,
+                answer: text,
+            });
+        } catch (err) {
+            reportSaveError(err);
+        } finally {
+            delete pendingTextAnswers.current[questionId];
+        }
+    };
+
     const handleTextAnswer = (questionId, text) => {
         setAnswers((prev) => ({
             ...prev,
             [questionId]: text,
         }));
 
+        pendingTextAnswers.current[questionId] = text;
+
         clearTimeout(answerTimers.current[questionId]);
-        answerTimers.current[questionId] = setTimeout(async () => {
-            try {
-                await AssessmentService.SaveAnswer(examid, {
-                    question_id: questionId,
-                    answer: text,
-                });
-            } catch (err) {
-                reportSaveError(err);
-            }
+        answerTimers.current[questionId] = setTimeout(() => {
+            delete answerTimers.current[questionId];
+            saveTextAnswer(questionId, text);
         }, 600);
+    };
+
+    // Saves any text answer still waiting on its debounce timer, so a
+    // just-typed answer can never be dropped by submitting before the
+    // autosave fires.
+    const flushPendingAnswers = async () => {
+        const pending = Object.entries(pendingTextAnswers.current);
+
+        Object.values(answerTimers.current).forEach(clearTimeout);
+        answerTimers.current = {};
+
+        await Promise.all(
+            pending.map(([questionId, text]) => saveTextAnswer(Number(questionId), text))
+        );
     };
 
     /* --------------------------------------------------
@@ -208,8 +297,8 @@ export default function RunningAssessmentQuestions() {
 
         setSubmitting(true);
         try {
+            await flushPendingAnswers();
             await AssessmentService.SubmitAssessment(examid);
-            localStorage.removeItem("running_attempt");
             localStorage.removeItem(`attempt_start_${attemptId}`);
             navigate(`/assesments/end/${examid}/result`);
         } catch (err) {
@@ -239,6 +328,9 @@ export default function RunningAssessmentQuestions() {
             </p>
         );
     }
+
+    const timeExpired = timeLeft !== null && timeLeft <= 0;
+    const isLastQuestion = current === questions.length - 1;
 
     /* --------------------------------------------------
        UI
@@ -323,7 +415,7 @@ export default function RunningAssessmentQuestions() {
                     Prev
                 </button>
 
-                {current === questions.length - 1 ? (
+                {isLastQuestion || timeExpired ? (
                     <button
                         onClick={() => submitExam(false)}
                         disabled={submitting}

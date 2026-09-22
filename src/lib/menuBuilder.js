@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   Users,
   BarChart3,
+  Sparkles,
 } from "lucide-react";
 
 export const useMenuBuilder = () => {
@@ -30,6 +31,11 @@ export const useMenuBuilder = () => {
       label: "Reports",
       path: "/reports",
       icon: BarChart3,
+    },
+    {
+      label: "AI Assistant",
+      path: "/ai",
+      icon: Sparkles,
     },
   ];
 };

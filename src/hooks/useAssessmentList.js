@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 
 // Shared data-fetching for the assessment/result list sections (running,
 // today, upcoming, missed, completed). They all normalize the same
@@ -10,7 +10,15 @@ export function useAssessmentList(fetcher, { pollInterval } = {}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Prevents overlapping fetches (e.g. a slow poll tick still in flight when
+  // the next one fires) from racing each other and letting a stale response
+  // that resolves last clobber a fresher one.
+  const inFlight = useRef(false);
+
   const load = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+
     try {
       const res = await fetcher();
       const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
@@ -19,6 +27,7 @@ export function useAssessmentList(fetcher, { pollInterval } = {}) {
     } catch (err) {
       setError(err);
     } finally {
+      inFlight.current = false;
       setLoading(false);
     }
   }, [fetcher]);

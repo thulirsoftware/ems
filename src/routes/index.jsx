@@ -16,6 +16,7 @@ import RunningAssessmentResultPage from "../features/assessments/components/Runn
 import ReportPage from "../features/reports/pages/ReportPage";
 import ComingSoonPage from "../features/common/ComingSoonPage";
 import Proctoring from "../features/proctoring/Proctoring";
+import AIAssistantPage from "../features/ai/pages/AIAssistantPage";
 
 export const router = createBrowserRouter([
   {
@@ -44,6 +45,7 @@ export const router = createBrowserRouter([
       { path: "results", element: <ResultList /> },
       { path: "results/:examid/show", element: <AssessmentResultPage /> },
       { path: "reports", element: <ReportPage /> },
+      { path: "ai", element: <AIAssistantPage /> },
       { path: "proctoring", element: <Proctoring /> },
       { path: "certificates", element: <ComingSoonPage title="Certificates" /> },
 
