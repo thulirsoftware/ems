@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Filter, X } from "lucide-react";
 import AssessmentService from "../../../services/assesment.service";
 import BatchService from "../../../services/batch.service";
@@ -30,21 +31,25 @@ export default function ReportFilterBar({ filters, onChange }) {
   const [local, setLocal] = useState({ ...emptyFilters, ...filters });
 
   useEffect(() => {
-    AssessmentService.AssessmentList().then((data) => {
-      // Response has one row per batch for batch-wise assessments — dedupe
-      // to a single entry per assessment for the dropdown.
-      const seen = new Map();
-      (data || []).forEach((row) => {
-        if (!seen.has(row.id)) seen.set(row.id, row);
-      });
-      setAssessments(Array.from(seen.values()));
-    });
+    AssessmentService.AssessmentList()
+      .then((data) => {
+        // Response has one row per batch for batch-wise assessments — dedupe
+        // to a single entry per assessment for the dropdown.
+        const seen = new Map();
+        (data || []).forEach((row) => {
+          if (!seen.has(row.id)) seen.set(row.id, row);
+        });
+        setAssessments(Array.from(seen.values()));
+      })
+      .catch((err) => toast.error(err?.response?.data?.message || "Failed to load assessments."));
 
-    AssessmentService.getAssessmentTypes().then((data) =>
-      setAssessmentTypes(data || [])
-    );
+    AssessmentService.getAssessmentTypes()
+      .then((data) => setAssessmentTypes(data || []))
+      .catch((err) => toast.error(err?.response?.data?.message || "Failed to load assessment types."));
 
-    UserService.UserList().then((data) => setUsers(data || []));
+    UserService.UserList()
+      .then((data) => setUsers(data || []))
+      .catch((err) => toast.error(err?.response?.data?.message || "Failed to load users."));
   }, []);
 
   useEffect(() => {
@@ -53,9 +58,9 @@ export default function ReportFilterBar({ filters, onChange }) {
       return;
     }
 
-    BatchService.getBatchesByAssessment(local.assessment_id).then((data) =>
-      setBatches(data || [])
-    );
+    BatchService.getBatchesByAssessment(local.assessment_id)
+      .then((data) => setBatches(data || []))
+      .catch((err) => toast.error(err?.response?.data?.message || "Failed to load batches."));
   }, [local.assessment_id]);
 
   const update = (key, value) => {

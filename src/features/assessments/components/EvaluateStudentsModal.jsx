@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import AssessmentService from "../../../services/assesment.service";
 import { useNavigate } from "react-router-dom";
 
@@ -6,17 +7,22 @@ export default function EvaluateStudentsModal({ assessmentId, batchId, onClose }
     const [students, setStudents] = useState([]);
     const navigate = useNavigate();
 
+    const fetchStudents = async () => {
+        try {
+            const data = await AssessmentService.getAssessmentUsersForEvaluation(
+                assessmentId,
+                batchId
+            );
+            setStudents(data || []);
+        } catch (err) {
+            toast.error(err?.response?.data?.message || "Failed to load students.");
+        }
+    };
+
     useEffect(() => {
         fetchStudents();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-
-    const fetchStudents = async () => {
-        const data = await AssessmentService.getAssessmentUsersForEvaluation(
-            assessmentId,
-            batchId
-        );
-        setStudents(data || []);
-    };
 
     return (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">

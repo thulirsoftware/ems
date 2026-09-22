@@ -21,7 +21,10 @@ export const useAuthStore = create((set) => {
     },
 
     logout: () => {
-      localStorage.clear();
+      // Targeted removal, not localStorage.clear() — that would also wipe
+      // unrelated persisted state (e.g. themeStore's theme preference).
+      localStorage.removeItem("token");
+      localStorage.removeItem("admin");
       set({ token: null, admin: null, isAuthenticated: false });
     },
   };

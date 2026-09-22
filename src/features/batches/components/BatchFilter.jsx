@@ -57,7 +57,7 @@ export default function BatchFilter({
                             key={assessment.id}
                             value={assessment.id}
                         >
-                            {assessment.name}
+                            {assessment.title}
                         </option>
                     ))}
                 </select>

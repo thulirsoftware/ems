@@ -23,6 +23,7 @@ export default function EditAssessmentModal({
   const [assessmentTypeSlug, setAssessmentTypeSlug] = useState("");
   const [batchId, setBatchId] = useState(null);
   const [totalMinutes, setTotalMinutes] = useState(0);
+  const [loading, setLoading] = useState(false);
 
   const [form, setForm] = useState({
     assessment_type_id: "",
@@ -117,6 +118,8 @@ export default function EditAssessmentModal({
 
 
   const updateAssessment = async () => {
+    if (loading) return;
+    setLoading(true);
 
     const payload = {
       assessment_type_id: form.assessment_type_id,
@@ -145,6 +148,12 @@ export default function EditAssessmentModal({
     try {
       await AssessmentService.updateAssessment(assessmentId, payload);
 
+      // Recompute from the current form value (not the value the assessment
+      // loaded with), so changing the assessment type here is reflected in
+      // which question editor (MCQ vs descriptive) step 3 shows.
+      const type = types.find((t) => String(t.id) === String(form.assessment_type_id));
+      setAssessmentTypeSlug(type?.slug || "");
+
       if (isBatchWise) {
         setStep(2); // Go to Batch
       } else {
@@ -155,6 +164,8 @@ export default function EditAssessmentModal({
       toast.error(
         err.response?.data?.message || "Failed to update assessment."
       );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -616,9 +627,10 @@ ${form.difficulty_level === level
           {step === 1 && (
             <button
               onClick={updateAssessment}
-              className="bg-red-600 text-white px-4 py-2 rounded"
+              disabled={loading}
+              className="bg-red-600 text-white px-4 py-2 rounded disabled:opacity-50"
             >
-              Update & Next
+              {loading ? "Updating..." : "Update & Next"}
             </button>
           )}
 

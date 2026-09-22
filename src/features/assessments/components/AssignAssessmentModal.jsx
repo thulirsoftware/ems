@@ -16,15 +16,19 @@ export default function AssignAssessmentModal({
     }, [assessmentId]);
 
     const loadUsers = async () => {
-        const data = await AssessmentService.getUsersWithAssignmentStatus(assessmentId);
-        setUsers(data);
+        try {
+            const data = await AssessmentService.getUsersWithAssignmentStatus(assessmentId);
+            setUsers(data);
 
-        // auto-select already assigned users
-        const alreadyAssigned = data
-            .filter(u => u.assigned)
-            .map(u => u.user_id);
+            // auto-select already assigned users
+            const alreadyAssigned = data
+                .filter(u => u.assigned)
+                .map(u => u.user_id);
 
-        setSelectedUsers(alreadyAssigned);
+            setSelectedUsers(alreadyAssigned);
+        } catch (err) {
+            toast.error(err?.response?.data?.message || "Failed to load users.");
+        }
     };
 
 

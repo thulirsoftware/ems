@@ -717,6 +717,28 @@ export default function CreateAssessmentModal({ onClose, onSuccess }) {
                                 </label>
 
                             </div>
+
+                            {form.has_negative && (
+                                <div className="flex flex-col gap-1 mt-4">
+                                    <label className="text-xs text-gray-600">
+                                        Negative Marks
+                                    </label>
+
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.25"
+                                        className="border p-2 rounded"
+                                        value={form.negative_marks}
+                                        onChange={(e) =>
+                                            setForm({
+                                                ...form,
+                                                negative_marks: Number(e.target.value),
+                                            })
+                                        }
+                                    />
+                                </div>
+                            )}
                         </>
                     )}
 
@@ -754,9 +776,10 @@ export default function CreateAssessmentModal({ onClose, onSuccess }) {
                     {step === 1 && (
                         <button
                             onClick={saveAssessment}
-                            className="bg-red-600 text-white px-4 py-2 rounded"
+                            disabled={loading}
+                            className="bg-red-600 text-white px-4 py-2 rounded disabled:opacity-50"
                         >
-                            Save & Next
+                            {loading ? "Saving..." : "Save & Next"}
                         </button>
                     )}
 

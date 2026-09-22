@@ -187,6 +187,24 @@ export default function EditDescriptiveQuestionModal({ assessmentId }) {
     const file = e.target.files[0];
     if (!file) return;
 
+    const allowed = [
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "text/csv",
+      "application/vnd.ms-excel",
+    ];
+
+    if (!allowed.includes(file.type)) {
+      toast.error("Only CSV and XLSX files are allowed.");
+      e.target.value = "";
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Maximum file size is 5 MB.");
+      e.target.value = "";
+      return;
+    }
+
     setImportFile(file);
 
   };
@@ -298,7 +316,8 @@ export default function EditDescriptiveQuestionModal({ assessmentId }) {
 
           <button
             onClick={updateQuestion}
-            className="bg-blue-600 text-white px-5 py-2 rounded"
+            disabled={loading}
+            className="bg-blue-600 text-white px-5 py-2 rounded disabled:opacity-50"
           >
             {loading ? "Updating..." : "Update Question"}
           </button>
@@ -307,7 +326,8 @@ export default function EditDescriptiveQuestionModal({ assessmentId }) {
 
           <button
             onClick={addQuestion}
-            className="bg-blue-600 text-white px-5 py-2 rounded"
+            disabled={loading}
+            className="bg-blue-600 text-white px-5 py-2 rounded disabled:opacity-50"
           >
             {loading ? "Saving..." : "Add Question"}
           </button>

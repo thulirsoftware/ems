@@ -5,6 +5,7 @@ import {
   ClipboardList,
   FileBarChart2,
   LineChart,
+  Sparkles,
 } from "lucide-react";
 
 export const useMenuBuilder = () => {
@@ -38,6 +39,11 @@ export const useMenuBuilder = () => {
       label: "Analytics",
       path: "/admin/analytics",
       icon: LineChart,
+    },
+    {
+      label: "AI Assistant",
+      path: "/admin/ai",
+      icon: Sparkles,
     },
   ];
 };

@@ -259,6 +259,24 @@ export default function EditQuestionSection({ assessmentId }) {
     const file = e.target.files[0];
     if (!file) return;
 
+    const allowed = [
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "text/csv",
+      "application/vnd.ms-excel",
+    ];
+
+    if (!allowed.includes(file.type)) {
+      toast.error("Only CSV and XLSX files are allowed.");
+      e.target.value = "";
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Maximum file size is 5 MB.");
+      e.target.value = "";
+      return;
+    }
+
     setImportFile(file);
 
   };

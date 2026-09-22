@@ -62,18 +62,20 @@ export default function EvaluateAssessment() {
         batchId
       );
 
-      const updatedQuestions = questions.map((q) =>
-        q.question_id === questionId
-          ? { ...q, is_correct: value }
-          : q
-      );
+      // Derived from a functional updater (not the outer `questions`
+      // closure) so grading two questions in quick succession can't have
+      // the second call's update overwrite the first with stale data.
+      let allGraded = false;
 
-      setQuestions(updatedQuestions);
-
-      /* check if all graded */
-      const allGraded = updatedQuestions.every(
-        (q) => q.is_correct !== null
-      );
+      setQuestions((prev) => {
+        const updated = prev.map((q) =>
+          q.question_id === questionId
+            ? { ...q, is_correct: value }
+            : q
+        );
+        allGraded = updated.every((q) => q.is_correct !== null);
+        return updated;
+      });
 
       if (allGraded) {
 
