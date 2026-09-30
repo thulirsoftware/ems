@@ -21,6 +21,7 @@ class StudentQuestionService
         $attempt = AssessmentAttempt::where('assessment_id', $assessmentId)
             ->where('user_id', $user->id)
             ->where('batch_id', $assignment->batch_id)
+            ->with('answers')
             ->firstOrFail();
 
         $assessment = Assessment::findOrFail($assessmentId);
@@ -31,35 +32,35 @@ class StudentQuestionService
             abort(422, 'Batch not found');
         }
 
-        $today = app_now()->toDateString();
-        $nowTime = app_now()->toTimeString();
-
-        if ($assessment->scheduling_type === Assessment::SCHEDULING_FLEXIBLE) {
-            $isRunning = app_now()->lte(flexible_attempt_deadline($attempt, $batch));
-        } else {
-            $isRunning = $batch->publish_date == $today && $nowTime >= $batch->start_time && $nowTime <= $batch->end_time;
-        }
-
-        if (!$isRunning) {
-            abort(403, 'Assessment not running');
+        // An unsubmitted attempt stays reachable after its deadline so the
+        // student can come back (lost connection, closed tab) and submit —
+        // answering itself is refused by StudentAnswerService.
+        if ($attempt->submitted_at) {
+            abort(403, 'Assessment already submitted');
         }
 
         if (!$attempt->question_order) {
-            $questions = AssessmentQuestion::where('assessment_id', $assessmentId)->get();
-
-            $ordered = $assessment->shuffle
-                ? $questions->shuffle()->pluck('id')->toArray()
-                : $questions->sortBy('order')->pluck('id')->toArray();
+            $ordered = resolve_question_order($assessment);
 
             $attempt->update(['question_order' => $ordered]);
         } else {
             $ordered = $attempt->question_order;
         }
 
+        $answers = $attempt->answers->keyBy('question_id');
+
         return AssessmentQuestion::whereIn('id', $ordered)
             ->with(['choices' => fn ($q) => $q->select('id', 'question_id', 'option', 'order')])
             ->get()
             ->sortBy(fn ($q) => array_search($q->id, $ordered))
-            ->values();
+            ->values()
+            // what the student already saved, so a resumed attempt shows it:
+            // the choice id for MCQ, the text for descriptive
+            ->map(function ($question) use ($answers) {
+                $saved = $answers->get($question->id)?->answer;
+                $question->setAttribute('saved_answer', $saved['choice_id'] ?? $saved['text'] ?? null);
+
+                return $question;
+            });
     }
 }

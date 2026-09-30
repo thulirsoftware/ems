@@ -101,11 +101,32 @@ class ToolRegistry
                     'type' => 'function',
                     'name' => $meta['name'],
                     'description' => $meta['description'],
-                    'parameters' => $meta['parameters'],
+                    'parameters' => $this->normalizeSchema($meta['parameters']),
                 ];
             })
             ->values()
             ->all();
+    }
+
+    // json_encode turns an empty PHP array into a JSON list ([]), but Gemini
+    // requires "properties" to be a JSON object — an empty list makes it
+    // reject the whole request as invalid JSON.
+    private function normalizeSchema(array $schema): array
+    {
+        foreach ($schema as $key => $value) {
+            if ($key === 'properties' && $value === []) {
+                $schema[$key] = new \stdClass();
+            } elseif ($key === 'properties' && is_array($value)) {
+                $schema[$key] = array_map(
+                    fn ($property) => is_array($property) ? $this->normalizeSchema($property) : $property,
+                    $value
+                );
+            } elseif (is_array($value)) {
+                $schema[$key] = $this->normalizeSchema($value);
+            }
+        }
+
+        return $schema;
     }
 
     public function prompt(string $actor): string

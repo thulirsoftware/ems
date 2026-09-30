@@ -8,6 +8,7 @@ use App\Models\AssessmentAssignment;
 use App\Models\AssessmentAttempt;
 use App\Models\Batch;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class BatchService
@@ -92,11 +93,20 @@ class BatchService
 
         $validated = Validator::make($data, [
             'name' => 'sometimes|required|string|max:255',
-            'publish_date' => 'nullable|date',
-            'start_time' => 'nullable|date_format:H:i:s',
-            'end_time' => 'nullable|date_format:H:i:s',
+            // a batch must always keep a schedule — omit a field to leave it unchanged
+            'publish_date' => 'sometimes|required|date',
+            'start_time' => 'sometimes|required|date_format:H:i:s',
+            'end_time' => 'sometimes|required|date_format:H:i:s',
             'capacity' => 'sometimes|required|integer|min:1',
         ])->validate();
+
+        if (isset($validated['capacity'])) {
+            $assignedCount = AssessmentAssignment::where('batch_id', $batch->id)->count();
+
+            if ($validated['capacity'] < $assignedCount) {
+                abort(422, "Capacity cannot be lower than the {$assignedCount} candidates already assigned");
+            }
+        }
 
         $start = $validated['start_time'] ?? $batch->start_time;
         $end = $validated['end_time'] ?? $batch->end_time;
@@ -129,7 +139,12 @@ class BatchService
             abort(403, 'Cannot delete batch after it has been attempted');
         }
 
-        $batch->delete();
+        // Its assignments go with it — left behind they point students at a
+        // batch that no longer exists ("Batch not found" on start).
+        DB::transaction(function () use ($batch) {
+            AssessmentAssignment::where('batch_id', $batch->id)->delete();
+            $batch->delete();
+        });
     }
 
     public function listUsers(Admin $admin, $id)
@@ -152,13 +167,9 @@ class BatchService
             'user_ids.*' => 'exists:users,id',
         ])->validate();
 
-        $currentUsers = AssessmentAssignment::where('batch_id', $batch->id)->pluck('user_id')->toArray();
-        $newUsers = array_diff($validated['user_ids'], $currentUsers);
-
-        if ($batch->capacity && (count($currentUsers) + count($newUsers)) > $batch->capacity) {
-            abort(422, 'Capacity exceeded');
-        }
-
+        // Capacity is enforced centrally in AssignmentService::assign() —
+        // the only path that writes AssessmentAssignment rows — so it
+        // applies equally here and to the general /admin/assignments API.
         return $this->assignmentService->assign($admin, [
             'assessment_id' => $batch->assessment_id,
             'user_ids' => $validated['user_ids'],

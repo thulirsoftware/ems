@@ -2,6 +2,7 @@
 
 namespace App\Services\AI;
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 
 class GeminiService
@@ -39,29 +40,14 @@ class GeminiService
             $payload['previous_interaction_id'] = $previousInteractionId;
         }
 
-        $response = Http::acceptJson()
-            ->contentType('application/json')
-            ->withHeaders([
-                'X-goog-api-key' => $this->apiKey,
-            ])
-            ->timeout(120)
-            ->post(
-                "{$this->baseUrl}/interactions",
-                $payload
-            );
-
-        return [
-            'success' => $response->successful(),
-            'status' => $response->status(),
-            'body' => $response->json(),
-        ];
+        return $this->send($payload);
     }
 
+    // $results holds one ['id', 'name', 'result'] entry per function call the
+    // model requested in the previous step — all of them must be answered together.
     public function continueInteraction(
         string $interactionId,
-        string $callId,
-        string $functionName,
-        mixed $result,
+        array $results,
         array $tools = []
     ): array {
         $payload = [
@@ -71,38 +57,51 @@ class GeminiService
 
             'previous_interaction_id' => $interactionId,
 
-            'input' => [
-                [
-                    'type' => 'function_result',
-                    'name' => $functionName,
-                    'call_id' => $callId,
-                    'result' => [
-                        [
-                            'type' => 'text',
-                            'text' => json_encode(
-                                $result,
-                                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-                            ),
-                        ],
+            'input' => array_map(fn (array $result) => [
+                'type' => 'function_result',
+                'name' => $result['name'],
+                'call_id' => $result['id'],
+                'result' => [
+                    [
+                        'type' => 'text',
+                        'text' => json_encode(
+                            $result['result'],
+                            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+                        ),
                     ],
                 ],
-            ],
+            ], $results),
         ];
 
         if (!empty($tools)) {
             $payload['tools'] = $tools;
         }
 
-        $response = Http::acceptJson()
-            ->contentType('application/json')
-            ->withHeaders([
-                'X-goog-api-key' => $this->apiKey,
-            ])
-            ->timeout(120)
-            ->post(
-                "{$this->baseUrl}/interactions",
-                $payload
-            );
+        return $this->send($payload);
+    }
+
+    private function send(array $payload): array
+    {
+        try {
+            $response = Http::acceptJson()
+                ->contentType('application/json')
+                ->withHeaders([
+                    'X-goog-api-key' => $this->apiKey,
+                ])
+                ->timeout(120)
+                ->post(
+                    "{$this->baseUrl}/interactions",
+                    $payload
+                );
+        } catch (ConnectionException $e) {
+            // Network failure or timeout — surface it like a gateway timeout
+            // instead of letting it bubble up as an unhandled 500.
+            return [
+                'success' => false,
+                'status' => 504,
+                'body' => ['error' => ['message' => $e->getMessage()]],
+            ];
+        }
 
         return [
             'success' => $response->successful(),
@@ -131,38 +130,45 @@ class GeminiService
         return $this->status($body) === 'requires_action';
     }
 
+    // A reply can be split across several text parts, so join them all.
     public function outputText(array $body): ?string
     {
+        $parts = [];
+
         foreach (data_get($body, 'steps', []) as $step) {
             if (($step['type'] ?? null) !== 'model_output') {
                 continue;
             }
 
             foreach ($step['content'] ?? [] as $content) {
-                if (($content['type'] ?? null) === 'text') {
-                    return $content['text'];
+                if (($content['type'] ?? null) === 'text' && ($content['text'] ?? '') !== '') {
+                    $parts[] = $content['text'];
                 }
             }
         }
 
-        return null;
+        return $parts ? implode("\n\n", $parts) : null;
     }
 
-    public function functionCall(array $body): ?array
+    // Every function call requested in this step — the model can ask for
+    // several tools in parallel.
+    public function functionCalls(array $body): array
     {
+        $calls = [];
+
         foreach (data_get($body, 'steps', []) as $step) {
             if (($step['type'] ?? null) !== 'function_call') {
                 continue;
             }
 
-            return [
+            $calls[] = [
                 'id' => $step['id'] ?? null,
                 'name' => $step['name'] ?? null,
                 'arguments' => (array) ($step['arguments'] ?? []),
             ];
         }
 
-        return null;
+        return $calls;
     }
 
     public function usage(array $body): array

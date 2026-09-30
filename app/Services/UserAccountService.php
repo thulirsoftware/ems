@@ -4,7 +4,7 @@ namespace App\Services;
 
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Str;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
 
 class UserAccountService
@@ -42,20 +42,39 @@ class UserAccountService
         $inserted = [];
         $generatedPasswords = [];
         $errors = [];
+        $seenEmails = [];
 
         foreach ($rows as $index => $data) {
             try {
-                if (empty($data['email']) || !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
+                $data['email'] = trim((string) ($data['email'] ?? ''));
+
+                if ($data['email'] === '' || !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
                     $errors[] = ['row' => $index + 2, 'error' => 'Invalid email'];
                     continue;
                 }
 
-                if (User::where('email', $data['email'])->exists()) {
+                // The whole batch is inserted at once, so a repeated email
+                // inside the file would fail the insert for every row.
+                $emailKey = strtolower($data['email']);
+
+                if (isset($seenEmails[$emailKey])) {
+                    $errors[] = ['row' => $index + 2, 'error' => 'Duplicate email in file'];
+                    continue;
+                }
+
+                if (User::withTrashed()->where('email', $data['email'])->exists()) {
                     $errors[] = ['row' => $index + 2, 'error' => 'Email already exists'];
                     continue;
                 }
 
-                $rawPassword = $data['password'] ?? null;
+                $rawPassword = isset($data['password']) ? (string) $data['password'] : null;
+
+                if ($rawPassword !== null && $rawPassword !== '' && strlen($rawPassword) < 8) {
+                    $errors[] = ['row' => $index + 2, 'error' => 'Password must be at least 8 characters'];
+                    continue;
+                }
+
+                $seenEmails[$emailKey] = true;
 
                 if (empty($rawPassword)) {
                     $rawPassword = Str::password(12);

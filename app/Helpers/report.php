@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Assessment;
+use App\Models\AssessmentQuestion;
 
 // Shared helpers for the dashboard and report endpoints.
 // Extracted verbatim from the private copies that previously lived in
@@ -29,6 +30,14 @@ if (!function_exists('parse_score')) {
             'total' => (int) $total,
             'percentage' => round(($value / $total) * 100),
         ];
+    }
+}
+
+if (!function_exists('descriptive_answer_is_blank')) {
+    // a stored descriptive answer is ['text' => ...]; null/whitespace = no answer
+    function descriptive_answer_is_blank($answer)
+    {
+        return trim((string) ($answer['text'] ?? '')) === '';
     }
 }
 
@@ -109,6 +118,23 @@ if (!function_exists('is_implicit_batch')) {
             && $batch
             && $assessment->scheduling_type !== Assessment::SCHEDULING_BATCH_WISE
             && $batch->name === 'individual_batch_' . $assessment->id;
+    }
+}
+
+if (!function_exists('resolve_question_order')) {
+    // The definitive, ordered list of question ids for an assessment,
+    // respecting its shuffle flag. Single source of truth for "how many
+    // questions does this attempt have" and "in what order" — used both to
+    // seed an attempt's question_order at creation (StudentAttemptService)
+    // and as a self-healing fallback anywhere an older attempt predates that
+    // (StudentQuestionService, StudentAttemptService::result()).
+    function resolve_question_order($assessment)
+    {
+        $questions = AssessmentQuestion::where('assessment_id', $assessment->id)->get();
+
+        return $assessment->shuffle
+            ? $questions->shuffle()->pluck('id')->toArray()
+            : $questions->sortBy('order')->pluck('id')->toArray();
     }
 }
 

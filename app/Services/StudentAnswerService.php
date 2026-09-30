@@ -25,7 +25,8 @@ class StudentAnswerService
 
     private function handleDescriptive(array $data): array
     {
-        if (empty($data['answer'])) {
+        // not empty(): "0" is a valid answer
+        if (!isset($data['answer']) || trim($data['answer']) === '') {
             abort(422, 'Answer is required');
         }
 
@@ -66,19 +67,10 @@ class StudentAnswerService
 
         $batch = Batch::findOrFail($assignment->batch_id);
 
-        $today = app_now()->toDateString();
-        $nowTime = app_now()->toTimeString();
-
-        if ($assessment->scheduling_type === Assessment::SCHEDULING_FLEXIBLE) {
-            if (app_now()->gt(flexible_attempt_deadline($attempt, $batch))) {
-                abort(403, 'Assessment time expired');
-            }
-        } else {
-            $isExpired = $batch->publish_date < $today || ($batch->publish_date == $today && $nowTime > $batch->end_time);
-
-            if ($isExpired) {
-                abort(403, 'Assessment time expired');
-            }
+        // Answers are never accepted after the attempt's deadline — the
+        // attempt itself stays open for submission (see StudentAttemptService).
+        if (!attempt_answering_open($assessment, $batch, $attempt)) {
+            abort(403, 'Assessment time expired');
         }
 
         AssessmentQuestion::where('id', $validated['question_id'])

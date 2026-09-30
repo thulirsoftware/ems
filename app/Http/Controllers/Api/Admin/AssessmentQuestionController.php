@@ -58,7 +58,9 @@ class AssessmentQuestionController extends Controller
     public function bulkStoreQuestions(Request $request, $assessment_id)
     {
         $request->validate([
-            'file' => 'required|file|mimes:csv,xlsx',
+            // Plain CSV files are detected as text/plain, so allow txt as a MIME type
+            // but still require a .csv/.xlsx file name.
+            'file' => 'required|file|extensions:csv,xlsx|mimes:csv,txt,xlsx',
         ]);
 
         $sheet = Excel::toArray([], $request->file('file'))[0];
@@ -67,10 +69,12 @@ class AssessmentQuestionController extends Controller
             return response()->json(['message' => 'File is empty'], 400);
         }
 
-        $header = array_map('strtolower', $sheet[0]);
+        $header = array_map(fn ($cell) => strtolower(trim((string) $cell)), $sheet[0]);
 
         $rows = array_map(
-            fn ($row) => array_combine($header, $row),
+            // pad or trim each row to the header width — a stray trailing comma
+            // would otherwise make array_combine() throw
+            fn ($row) => array_combine($header, array_slice(array_pad($row, count($header), null), 0, count($header))),
             array_slice($sheet, 1)
         );
 

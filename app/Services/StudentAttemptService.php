@@ -12,6 +12,10 @@ use App\Models\User;
 
 class StudentAttemptService
 {
+    public function __construct(
+        private ResultService $resultService
+    ) {}
+
     public function start(User $user, $assessmentId): array
     {
         $assignment = AssessmentAssignment::where('assessment_id', $assessmentId)
@@ -19,14 +23,30 @@ class StudentAttemptService
             ->latest('id')
             ->firstOrFail();
 
-        $assessment = Assessment::where('id', $assessmentId)
-            ->where('is_active', true)
-            ->firstOrFail();
+        $assessment = Assessment::findOrFail($assessmentId);
 
         $batch = Batch::find($assignment->batch_id);
 
         if (!$batch) {
             abort(422, 'Batch not found');
+        }
+
+        $hideBatch = is_implicit_batch($assessment, $batch);
+
+        $existing = AssessmentAttempt::where('assessment_id', $assessmentId)
+            ->where('user_id', $user->id)
+            ->where('batch_id', $assignment->batch_id)
+            ->first();
+
+        // An attempt already started can always be resumed until it is
+        // submitted — even after the window closed (answering is blocked then,
+        // but the student must still be able to come back and submit).
+        if ($existing) {
+            return $this->resumeOrReject($existing, $assessment, $batch, $hideBatch);
+        }
+
+        if (!$assessment->is_active) {
+            abort(404, 'The resource you are trying to access does not exist.');
         }
 
         $today = app_now()->toDateString();
@@ -42,37 +62,62 @@ class StudentAttemptService
             abort(403, 'Assessment is not currently available');
         }
 
-        $existing = AssessmentAttempt::where('assessment_id', $assessmentId)
-            ->where('user_id', $user->id)
-            ->where('batch_id', $assignment->batch_id)
-            ->first();
-
-        $hideBatch = is_implicit_batch($assessment, $batch);
-
-        if ($existing) {
-            if (!$existing->submitted_at) {
-                return [
-                    'status' => 200,
-                    'message' => 'Resume your current attempt',
-                    'attempt' => [...$existing->toArray(), 'batch_id' => $hideBatch ? null : $existing->batch_id],
-                ];
-            }
-
-            abort(403, 'You have already completed this exam');
+        // Nothing to answer would produce a meaningless 0/0 score that every
+        // report treats as "never graded".
+        if (!AssessmentQuestion::where('assessment_id', $assessment->id)->exists()) {
+            abort(422, 'This assessment has no questions yet. Please contact your administrator.');
         }
 
-        $attempt = AssessmentAttempt::create([
-            'assessment_id' => $assessmentId,
-            'user_id' => $user->id,
-            'batch_id' => $assignment->batch_id,
-            'started_at' => app_now()->toTimeString(),
-        ]);
+        try {
+            $attempt = AssessmentAttempt::create([
+                'assessment_id' => $assessmentId,
+                'user_id' => $user->id,
+                'batch_id' => $assignment->batch_id,
+                'started_at' => app_now()->toTimeString(),
+                'question_order' => resolve_question_order($assessment),
+            ]);
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+            // Lost the race to a concurrent start() for the same
+            // assessment/user/batch — someone else's insert won, so resume
+            // (or reject) that one instead of erroring out.
+            $existing = AssessmentAttempt::where('assessment_id', $assessmentId)
+                ->where('user_id', $user->id)
+                ->where('batch_id', $assignment->batch_id)
+                ->firstOrFail();
+
+            return $this->resumeOrReject($existing, $assessment, $batch, $hideBatch);
+        }
 
         return [
             'status' => 201,
             'message' => 'Assessment started',
-            'attempt' => [...$attempt->toArray(), 'batch_id' => $hideBatch ? null : $attempt->batch_id],
+            'attempt' => [
+                ...$attempt->toArray(),
+                'batch_id' => $hideBatch ? null : $attempt->batch_id,
+                ...attempt_state($assessment, $batch, $attempt),
+            ],
         ];
+    }
+
+    private function resumeOrReject(AssessmentAttempt $existing, Assessment $assessment, Batch $batch, bool $hideBatch): array
+    {
+        if (!$existing->submitted_at) {
+            $state = attempt_state($assessment, $batch, $existing);
+
+            return [
+                'status' => 200,
+                'message' => $state['answering_closed']
+                    ? 'Time is over — answering is closed. Submit your attempt to finish.'
+                    : 'Resume your current attempt',
+                'attempt' => [
+                    ...$existing->toArray(),
+                    'batch_id' => $hideBatch ? null : $existing->batch_id,
+                    ...$state,
+                ],
+            ];
+        }
+
+        abort(403, 'You have already completed this exam');
     }
 
     public function submit(User $user, $assessmentId): array
@@ -158,11 +203,32 @@ class StudentAttemptService
 
     private function submitManualAssessment(AssessmentAttempt $attempt): array
     {
+        $assessment = $attempt->assessment;
+        $answers = $attempt->answers->keyBy('question_id');
+
+        // A question left blank has nothing to evaluate — mark it incorrect
+        // now so the administrator only grades real answers.
+        foreach ($assessment->questions()->pluck('id') as $questionId) {
+            $answer = $answers->get($questionId);
+
+            if ($answer && !descriptive_answer_is_blank($answer->answer)) {
+                continue;
+            }
+
+            $attempt->answers()->updateOrCreate(
+                ['question_id' => $questionId],
+                ['answer' => $answer?->answer, 'is_correct' => false]
+            );
+        }
+
+        // Everything blank → nothing left to grade, so the score is final now.
+        $final = $this->resultService->finalizeIfFullyGraded($assessment, $attempt);
+
         return [
-            'score' => 'Pending Evaluation',
+            'score' => $final['final'] ? $final['score'] : 'Pending Evaluation',
             'correct' => 0,
             'wrong' => 0,
-            'total' => $attempt->assessment->questions()->count(),
+            'total' => $final['total'] ?? $assessment->questions()->count(),
         ];
     }
 
@@ -187,7 +253,27 @@ class StudentAttemptService
             abort(403, 'Your assessment is under evaluation');
         }
 
-        $ordered = $attempt->question_order ?? [];
+        // The result reveals the correct answers — hold it back until the
+        // window has closed for every candidate of this batch.
+        $batch = Batch::find($attempt->batch_id);
+
+        if (!results_released($attempt->assessment, $batch)) {
+            $releaseAt = results_release_time($attempt->assessment, $batch);
+
+            abort(403, 'Your answers are submitted. Results will be available after the exam closes on '.$releaseAt->format('d M Y, h:i A').'.');
+        }
+
+        $ordered = $attempt->question_order;
+
+        if (empty($ordered)) {
+            // Attempts created before question_order was seeded at start()
+            // time (or reached here without ever hitting the question-list
+            // endpoint) would otherwise report 0 total_marks / 0% despite a
+            // correctly-scored attempt — self-heal by deriving it now.
+            $ordered = resolve_question_order($attempt->assessment);
+            $attempt->update(['question_order' => $ordered]);
+        }
+
         $totalQuestions = count($ordered);
 
         $page = max(1, (int) ($query['page'] ?? 1));

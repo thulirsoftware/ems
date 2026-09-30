@@ -51,6 +51,9 @@ class ChoiceService
             'order' => 'nullable|integer',
         ])->validate();
 
+        // "order" is NOT NULL — append after the existing choices when omitted.
+        $validated['order'] ??= (int) AssessmentChoice::where('question_id', $question->id)->max('order') + 1;
+
         return AssessmentChoice::create(['question_id' => $question->id, ...$validated]);
     }
 
@@ -67,6 +70,11 @@ class ChoiceService
             'is_correct' => 'boolean',
             'order' => 'nullable|integer',
         ])->validate();
+
+        // "order" is NOT NULL — a null means "leave it unchanged".
+        if (array_key_exists('order', $validated) && $validated['order'] === null) {
+            unset($validated['order']);
+        }
 
         $choice->update($validated);
 

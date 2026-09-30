@@ -33,8 +33,8 @@ class MyAssessmentTool implements AITool
             'actions' => [
                 'upcoming — assigned assessments scheduled for a future date/time.',
                 'today — assigned assessments scheduled later today.',
-                'running — assigned assessments currently open and not yet attempted.',
-                'completed — assigned assessments the student has already attempted.',
+                'running — assigned assessments open right now, plus any the student started but has not submitted yet. For those, answering_closed=true means time is over: answers can no longer be changed, but the student must still open the assessment and submit it.',
+                'completed — assigned assessments the student has submitted.',
                 'missed — assigned assessments whose window passed without an attempt.',
                 'get — a single assigned assessment by id, with its schedule.',
             ],

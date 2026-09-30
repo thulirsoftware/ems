@@ -29,7 +29,7 @@ class AssignmentTool implements AITool
                     'assessment_id' => ['type' => 'INTEGER'],
                     'batch_id' => [
                         'type' => 'INTEGER',
-                        'description' => 'Required for batch_wise assessments; omit for fixed/flexible assessments (their single hidden batch is used automatically).',
+                        'description' => 'Required for batch_wise assessments. For fixed/flexible assessments omit it to use their own hidden batch, or pass a re-exam batch id to target that re-exam.',
                     ],
                     'user_ids' => ['type' => 'ARRAY', 'items' => ['type' => 'INTEGER'], 'description' => 'Required for assign, unassign.'],
                 ],

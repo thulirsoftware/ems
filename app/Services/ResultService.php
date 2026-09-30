@@ -60,10 +60,14 @@ class ResultService
         $batch = $this->resolveBatch($assessment, $batchId);
         $resolvedBatchId = $batch?->id;
 
+        // Only candidates of the resolved batch — attempts below are scoped to
+        // it too, so candidates of other batches would wrongly show as absent.
         $assignments = AssessmentAssignment::where('assessment_id', $assessment->id)
+            ->where('batch_id', $resolvedBatchId)
             ->with('user:id,name')
             ->orderByDesc('id')
             ->get()
+            ->filter(fn ($assignment) => $assignment->user !== null)
             ->unique('user_id')
             ->values();
 
@@ -160,22 +164,32 @@ class ResultService
         $answer = $attempt->answers()->firstOrCreate(['question_id' => $validated['question_id']], ['answer' => null]);
         $answer->update(['is_correct' => $validated['is_correct']]);
 
+        return $this->finalizeIfFullyGraded($assessment, $attempt);
+    }
+
+    // Once every question of a descriptive attempt has a grade, compute and
+    // store the final "score/total". Shared by gradeAnswer() and by submit,
+    // which pre-grades blank answers. Negative marks apply only to answers
+    // actually given and marked wrong — a blank scores 0, exactly like an
+    // unanswered MCQ question.
+    public function finalizeIfFullyGraded(Assessment $assessment, AssessmentAttempt $attempt): array
+    {
         $totalQuestions = $assessment->questions()->count();
-        $gradedCount = $attempt->answers()->whereNotNull('is_correct')->count();
+        $graded = $attempt->answers()->whereNotNull('is_correct')->get();
 
-        if ($gradedCount === $totalQuestions) {
-            $correct = $attempt->answers()->where('is_correct', true)->count();
-            $wrong = $attempt->answers()->where('is_correct', false)->count();
-
-            $scoreValue = $assessment->has_negative ? $correct - ($wrong * $assessment->negative_marks) : $correct;
-            $scoreValue = max(0, $scoreValue);
-
-            $attempt->update(['score' => $scoreValue.'/'.$totalQuestions]);
-
-            return ['final' => true, 'score' => $attempt->score];
+        if ($graded->count() < $totalQuestions) {
+            return ['final' => false, 'graded' => $graded->count(), 'total' => $totalQuestions];
         }
 
-        return ['final' => false, 'graded' => $gradedCount, 'total' => $totalQuestions];
+        $correct = $graded->filter(fn ($answer) => (bool) $answer->is_correct)->count();
+        $wrongAnswered = $graded->filter(fn ($answer) => !$answer->is_correct && !descriptive_answer_is_blank($answer->answer))->count();
+
+        $scoreValue = $assessment->has_negative ? $correct - ($wrongAnswered * $assessment->negative_marks) : $correct;
+        $scoreValue = max(0, $scoreValue);
+
+        $attempt->update(['score' => $scoreValue.'/'.$totalQuestions]);
+
+        return ['final' => true, 'score' => $attempt->score];
     }
 
     public function userResult(Admin $admin, $assessmentId, $userId, $batchId): array

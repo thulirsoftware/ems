@@ -25,6 +25,10 @@ class ReExamService
     {
         $userIds = array_values(array_unique($userIds));
 
+        if ($capacity && count($userIds) > $capacity) {
+            abort(422, "Cannot create re-exam: source batch capacity is {$capacity} but ".count($userIds).' users matched. Increase capacity or narrow the filter.');
+        }
+
         return DB::transaction(function () use ($admin, $assessment, $validated, $namePrefix, $capacity, $userIds) {
             $batch = Batch::create([
                 'assessment_id' => $assessment->id,
@@ -60,8 +64,8 @@ class ReExamService
             'user_ids' => 'nullable|array',
             'user_ids.*' => 'exists:users,id',
             'publish_date' => 'required|date',
-            'start_time' => 'required',
-            'end_time' => 'required|after:start_time',
+            'start_time' => 'required|date_format:H:i:s',
+            'end_time' => 'required|date_format:H:i:s|after:start_time',
         ])->validate();
 
         $assessment = Assessment::where('id', $validated['assessment_id'])->where('admin_id', $admin->id)->firstOrFail();
@@ -121,8 +125,8 @@ class ReExamService
             'passing_percentage' => 'nullable|numeric|min:0|max:100',
             'source_batch_id' => 'nullable|exists:batches,id',
             'publish_date' => 'required|date',
-            'start_time' => 'required',
-            'end_time' => 'required|after:start_time',
+            'start_time' => 'required|date_format:H:i:s',
+            'end_time' => 'required|date_format:H:i:s|after:start_time',
         ])->validate();
 
         if (in_array($validated['filter'], ['failed', 'both']) && !isset($validated['passing_percentage'])) {

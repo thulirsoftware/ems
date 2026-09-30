@@ -20,8 +20,9 @@ class ConversationService
 
     public function getConversations(string $actor, int $actorId)
     {
+        // Most recently active first, so a conversation jumps to the top when it's used.
         return AIConversation::where($actor === 'admin' ? 'admin_id' : 'user_id', $actorId)
-            ->latest()
+            ->latest('updated_at')
             ->get([
                 'id',
                 'title',
@@ -50,16 +51,26 @@ class ConversationService
             ->findOrFail($conversationId);
     }
 
-    public function getInteractionId(int $conversationId): ?string
-    {
-        return AIConversation::where('id', $conversationId)->value('interaction_id');
+    public function getInteractionId(
+        string $actor,
+        int $actorId,
+        int $conversationId
+    ): ?string {
+        return AIConversation::where($actor === 'admin' ? 'admin_id' : 'user_id', $actorId)
+            ->where('id', $conversationId)
+            ->firstOrFail()
+            ->interaction_id;
     }
 
     public function saveInteractionId(
+        string $actor,
+        int $actorId,
         int $conversationId,
         string $interactionId
     ): AIConversation {
-        $conversation = AIConversation::findOrFail($conversationId);
+        $conversation = AIConversation::where($actor === 'admin' ? 'admin_id' : 'user_id', $actorId)
+            ->where('id', $conversationId)
+            ->firstOrFail();
 
         $conversation->update([
             'interaction_id' => $interactionId,
@@ -113,16 +124,16 @@ class ConversationService
 
     public function extractTitle(string &$assistantMessage): ?string
     {
-        if (!preg_match('/^\[TITLE\]:\s*(.+)$/m', $assistantMessage, $matches)) {
+        if (!preg_match('/^\[TITLE\]:[ \t]*(.+)$/m', $assistantMessage, $matches)) {
             return null;
         }
 
-        $assistantMessage = preg_replace(
-            '/^\[TITLE\]:\s*.+\R\R?/',
+        $assistantMessage = trim(preg_replace(
+            '/^\[TITLE\]:[ \t]*.+(\R|$)\R?/m',
             '',
             $assistantMessage,
             1
-        );
+        ));
 
         return trim($matches[1]);
     }

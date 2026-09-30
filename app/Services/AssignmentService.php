@@ -23,6 +23,23 @@ class AssignmentService
         return Assessment::where('id', $id)->where('admin_id', $admin->id)->firstOrFail();
     }
 
+    // Assignments of other assessments whose batch overlaps $batch's time slot.
+    // Uses the query builder, so soft deletes must be excluded by hand —
+    // otherwise an unassigned candidate, or a deleted assessment/batch, would
+    // still count as a clash and block new assignments.
+    private function conflictingAssignments(Assessment $assessment, $batch)
+    {
+        return DB::table('assessment_assignments as aa')
+            ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
+            ->join('batches as b', 'b.id', '=', 'aa.batch_id')
+            ->whereNull('aa.deleted_at')
+            ->whereNull('a.deleted_at')
+            ->whereNull('b.deleted_at')
+            ->where('a.id', '!=', $assessment->id)
+            ->whereDate('b.publish_date', $batch->publish_date)
+            ->where(fn ($q) => $q->where('b.start_time', '<', $batch->end_time)->where('b.end_time', '>', $batch->start_time));
+    }
+
     // $batchId is untyped: it's an unvalidated query param, so it must flow
     // into resolve_batch() exactly as received — see the comment on
     // AssessmentService::findOwned() for why.
@@ -46,12 +63,7 @@ class AssignmentService
         $conflictsByUser = collect();
 
         if ($assessment->scheduling_type !== Assessment::SCHEDULING_FLEXIBLE) {
-            $conflictsByUser = DB::table('assessment_assignments as aa')
-                ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
-                ->join('batches as b', 'b.id', '=', 'aa.batch_id')
-                ->where('a.id', '!=', $assessment->id)
-                ->whereDate('b.publish_date', $batch->publish_date)
-                ->where(fn ($q) => $q->where('b.start_time', '<', $batch->end_time)->where('b.end_time', '>', $batch->start_time))
+            $conflictsByUser = $this->conflictingAssignments($assessment, $batch)
                 ->select('aa.user_id', 'a.id', 'a.title')
                 ->get()
                 ->keyBy('user_id');
@@ -94,6 +106,15 @@ class AssignmentService
             abort(403, 'Cannot assign users after batch has been attempted');
         }
 
+        if ($batch->capacity) {
+            $currentUserIds = AssessmentAssignment::where('batch_id', $batch->id)->pluck('user_id')->toArray();
+            $newUserIds = array_diff($validated['user_ids'], $currentUserIds);
+
+            if (count($currentUserIds) + count($newUserIds) > $batch->capacity) {
+                abort(422, 'Capacity exceeded');
+            }
+        }
+
         $assignments = [];
         $conflicts = [];
 
@@ -101,13 +122,8 @@ class AssignmentService
             $conflict = null;
 
             if ($assessment->scheduling_type !== Assessment::SCHEDULING_FLEXIBLE) {
-                $conflict = DB::table('assessment_assignments as aa')
-                    ->join('assessments as a', 'a.id', '=', 'aa.assessment_id')
-                    ->join('batches as b', 'b.id', '=', 'aa.batch_id')
+                $conflict = $this->conflictingAssignments($assessment, $batch)
                     ->where('aa.user_id', $userId)
-                    ->where('a.id', '!=', $assessment->id)
-                    ->whereDate('b.publish_date', $batch->publish_date)
-                    ->where(fn ($q) => $q->where('b.start_time', '<', $batch->end_time)->where('b.end_time', '>', $batch->start_time))
                     ->select('a.id', 'a.title')
                     ->first();
             }
@@ -122,6 +138,9 @@ class AssignmentService
                 ->where('user_id', $userId)
                 ->where('batch_id', $batch->id)
                 ->first();
+
+            // Already actively assigned — nothing changes, so don't notify again.
+            $alreadyAssigned = $assignment && !$assignment->trashed();
 
             if ($assignment) {
                 $assignment->restore();
@@ -143,13 +162,15 @@ class AssignmentService
                 }
             }
 
-            NotificationService::notifyUser(
-                $userId,
-                'assessment_assigned',
-                'New assessment assigned',
-                "You have been assigned: {$assessment->title}",
-                ['assessment_id' => $assessment->id, 'admin_id' => $admin->id]
-            );
+            if (!$alreadyAssigned) {
+                NotificationService::notifyUser(
+                    $userId,
+                    'assessment_assigned',
+                    'New assessment assigned',
+                    "You have been assigned: {$assessment->title}",
+                    ['assessment_id' => $assessment->id, 'admin_id' => $admin->id]
+                );
+            }
 
             $assignments[] = $assignment;
         }

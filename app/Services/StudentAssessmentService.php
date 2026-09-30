@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Assessment;
 use App\Models\AssessmentAssignment;
+use App\Models\AssessmentAttempt;
 use App\Models\Batch;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -15,19 +16,51 @@ class StudentAssessmentService
         return Batch::whereIn('id', $assignments->pluck('batch_id')->filter()->unique())->get()->keyBy('id');
     }
 
-    private function mapWithBatch($assignments, $batches)
+    // The user's attempts keyed by "assessment_id-batch_id".
+    private function attemptsMap(User $user)
     {
-        return $assignments->map(function ($assignment) use ($batches) {
+        return AssessmentAttempt::where('user_id', $user->id)
+            ->get()
+            ->keyBy(fn ($attempt) => $attempt->assessment_id.'-'.$attempt->batch_id);
+    }
+
+    private function attemptFor($attempts, $assignment)
+    {
+        return $attempts->get($assignment->assessment_id.'-'.$assignment->batch_id);
+    }
+
+    // Pass $attempts to also include each row's attempt_state().
+    private function mapWithBatch($assignments, $batches, $attempts = null)
+    {
+        return $assignments->map(function ($assignment) use ($batches, $attempts) {
             $assessment = $assignment->assessment;
             $batch = $batches[$assignment->batch_id] ?? null;
 
-            return [...$assessment->toArray(), ...batch_schedule_fields($assessment, $batch)];
+            $row = [...$assessment->toArray(), ...batch_schedule_fields($assessment, $batch)];
+
+            if ($attempts !== null) {
+                $row = [...$row, ...attempt_state($assessment, $batch, $this->attemptFor($attempts, $assignment))];
+            }
+
+            return $row;
         })->values();
     }
 
     private function assignments(User $user)
     {
-        return AssessmentAssignment::where('user_id', $user->id)->with('assessment')->get();
+        // An assessment soft-deleted by its admin leaves its assignments behind
+        // with a null relation — skip them rather than crash every listing.
+        //
+        // Only the newest assignment per assessment counts: after a re-exam,
+        // start/submit/result all act on the re-exam, so listing the original
+        // too would show a card whose actions hit the wrong attempt.
+        return AssessmentAssignment::where('user_id', $user->id)
+            ->with('assessment')
+            ->orderByDesc('id')
+            ->get()
+            ->filter(fn ($assignment) => $assignment->assessment !== null)
+            ->unique('assessment_id')
+            ->values();
     }
 
     public function upcoming(User $user): array
@@ -87,49 +120,44 @@ class StudentAssessmentService
 
         $assignments = $this->assignments($user);
         $batches = $this->batchesMap($assignments);
+        $attempts = $this->attemptsMap($user);
 
-        $filtered = $assignments->filter(function ($assignment) use ($today, $nowTime, $batches, $user) {
+        $filtered = $assignments->filter(function ($assignment) use ($today, $nowTime, $batches, $attempts) {
             $assessment = $assignment->assessment;
-
-            if (!$assessment->is_active) {
-                return false;
-            }
-
             $batch = $batches[$assignment->batch_id] ?? null;
+            $attempt = $this->attemptFor($attempts, $assignment);
 
             if (!$batch) {
                 return false;
             }
 
-            $isRunning = $assessment->scheduling_type === Assessment::SCHEDULING_FLEXIBLE
-                ? (!$batch->publish_date || $batch->publish_date <= $today) && (!$batch->expiry_date || $batch->expiry_date >= $today)
-                : $batch->publish_date == $today && $batch->start_time <= $nowTime && $batch->end_time >= $nowTime;
+            if ($attempt) {
+                // Started but not submitted stays "running" until the student
+                // submits — even after the window closes (answering is blocked
+                // then, see attempt_state()) or the assessment is deactivated.
+                return !$attempt->submitted_at;
+            }
 
-            if (!$isRunning) {
+            if (!$assessment->is_active) {
                 return false;
             }
 
-            return !DB::table('assessment_attempts')
-                ->where('assessment_id', $assessment->id)
-                ->where('batch_id', $assignment->batch_id)
-                ->where('user_id', $user->id)
-                ->whereNotNull('submitted_at')
-                ->exists();
+            return $assessment->scheduling_type === Assessment::SCHEDULING_FLEXIBLE
+                ? (!$batch->publish_date || $batch->publish_date <= $today) && (!$batch->expiry_date || $batch->expiry_date >= $today)
+                : $batch->publish_date == $today && $batch->start_time <= $nowTime && $batch->end_time >= $nowTime;
         });
 
-        return $this->mapWithBatch($filtered, $batches)->all();
+        return $this->mapWithBatch($filtered, $batches, $attempts)->all();
     }
 
     public function completed(User $user): array
     {
-        $attempts = DB::table('assessment_attempts')->where('user_id', $user->id)->select('assessment_id', 'batch_id')->get();
-
         $assignments = $this->assignments($user);
         $batches = $this->batchesMap($assignments);
+        $attempts = $this->attemptsMap($user);
 
-        $filtered = $assignments->filter(fn ($assignment) => $attempts->contains(
-            fn ($a) => $a->assessment_id == $assignment->assessment_id && $a->batch_id == $assignment->batch_id
-        ));
+        // Submitted only — an unsubmitted attempt is still listed under running().
+        $filtered = $assignments->filter(fn ($assignment) => $this->attemptFor($attempts, $assignment)?->submitted_at !== null);
 
         return $this->mapWithBatch($filtered, $batches)->all();
     }
@@ -169,12 +197,13 @@ class StudentAssessmentService
     {
         $assignment = AssessmentAssignment::where('user_id', $user->id)
             ->where('assessment_id', $assessmentId)
+            ->whereHas('assessment')
             ->with('assessment')
             ->latest('id')
             ->firstOrFail();
 
         $batches = $this->batchesMap(collect([$assignment]));
 
-        return $this->mapWithBatch(collect([$assignment]), $batches)->first();
+        return $this->mapWithBatch(collect([$assignment]), $batches, $this->attemptsMap($user))->first();
     }
 }

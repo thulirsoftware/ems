@@ -23,7 +23,7 @@ class AIService
         Admin|User $actorModel
     ): array {
         $previousInteractionId = $this->conversationService
-            ->getInteractionId($conversationId);
+            ->getInteractionId($actor, $actorModel->id, $conversationId);
 
         $input = [];
 
@@ -65,9 +65,9 @@ class AIService
                 ];
             }
 
-            $functionCall = $this->geminiService->functionCall($body);
+            $functionCalls = $this->geminiService->functionCalls($body);
 
-            if (!$functionCall) {
+            if (!$functionCalls) {
                 return [
                     'success' => false,
                     'status' => 500,
@@ -75,25 +75,25 @@ class AIService
                 ];
             }
 
-            $toolResult = $this->toolExecutor->execute(
-                $functionCall['name'],
-                $functionCall['arguments'],
-                $actor
-            );
+            // Gemini may request several tools in parallel; every call must be
+            // answered in the same follow-up request.
+            $results = [];
 
-            $toolResult = json_decode(
-                json_encode(
-                    $toolResult,
-                    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-                ),
-                true
-            );
+            foreach ($functionCalls as $functionCall) {
+                $results[] = [
+                    'id' => $functionCall['id'],
+                    'name' => $functionCall['name'],
+                    'result' => $this->toolExecutor->execute(
+                        $functionCall['name'],
+                        $functionCall['arguments'],
+                        $actor
+                    ),
+                ];
+            }
 
             $interaction = $this->geminiService->continueInteraction(
                 interactionId: $this->geminiService->interactionId($body),
-                callId: $functionCall['id'],
-                functionName: $functionCall['name'],
-                result: $toolResult,
+                results: $results,
                 tools: $this->toolRegistry->geminiTools($actor)
             );
 
@@ -114,16 +114,21 @@ class AIService
         }
 
         $conversation = $this->conversationService->saveInteractionId(
+            $actor,
+            $actorModel->id,
             $conversationId,
             $this->geminiService->interactionId($body)
         );
 
-        $assistantMessage = $this->geminiService->outputText($body);
+        $assistantMessage = $this->geminiService->outputText($body)
+            ?? 'Sorry, I could not generate a response. Please try again.';
 
-        $title = null;
+        // Always strip a [TITLE] line so it never leaks into the chat, but only
+        // use it to name the conversation on the first exchange.
+        $title = $this->conversationService->extractTitle($assistantMessage);
 
-        if (!$previousInteractionId) {
-            $title = $this->conversationService->extractTitle($assistantMessage);
+        if ($previousInteractionId) {
+            $title = null;
         }
 
         $this->conversationService->saveMessages(
@@ -148,7 +153,16 @@ class AIService
 
         return [
             'success' => false,
-            'status' => $status,
+
+            // Never pass Gemini's own status through: a 401 from an invalid
+            // API key would make the frontend think the user's session expired
+            // and log them out. Report upstream failures as gateway errors.
+            'status' => match ($status) {
+                429 => 429,
+                408, 504 => 504,
+                503 => 503,
+                default => 502,
+            },
 
             'message' => match ($status) {
                 400 => 'The AI request is invalid.',

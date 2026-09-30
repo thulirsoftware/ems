@@ -31,6 +31,33 @@ class QuestionService
             ->firstOrFail();
     }
 
+    // Answering, evaluation and grading all follow the assessment's type, so a
+    // question of the other type could never be answered or scored correctly.
+    private function ensureTypeMatchesAssessment(Assessment $assessment, string $questionType): void
+    {
+        $assessmentType = $assessment->type?->slug;
+
+        if (in_array($assessmentType, ['mcq', 'descriptive'], true) && $assessmentType !== $questionType) {
+            abort(422, "This is a {$assessmentType} assessment — only {$assessmentType} questions can be added to it");
+        }
+    }
+
+    // An MCQ question needs exactly one correct choice to be scorable.
+    private function ensureSingleCorrectChoice(array $choices): void
+    {
+        $correct = collect($choices)->filter(fn ($choice) => filter_var($choice['is_correct'], FILTER_VALIDATE_BOOLEAN))->count();
+
+        if ($correct !== 1) {
+            abort(422, 'Exactly one choice must be marked correct');
+        }
+    }
+
+    // "order" is NOT NULL, so an omitted order appends after the existing questions.
+    private function nextOrder(int $assessmentId): int
+    {
+        return (int) (AssessmentQuestion::where('assessment_id', $assessmentId)->max('order') ?? 0) + 1;
+    }
+
     public function list(Admin $admin, $assessmentId)
     {
         $this->ownedAssessment($admin, $assessmentId);
@@ -65,6 +92,8 @@ class QuestionService
             'config' => 'nullable|array',
         ])->validate();
 
+        $this->ensureTypeMatchesAssessment($assessment, $validated['type']);
+
         return AssessmentQuestion::create(['assessment_id' => $assessment->id, ...$validated]);
     }
 
@@ -82,6 +111,15 @@ class QuestionService
             'order' => 'nullable|integer',
             'config' => 'nullable|array',
         ])->validate();
+
+        // "order" is NOT NULL — a null means "leave it unchanged".
+        if (array_key_exists('order', $validated) && $validated['order'] === null) {
+            unset($validated['order']);
+        }
+
+        if (isset($validated['type'])) {
+            $this->ensureTypeMatchesAssessment($question->assessment, $validated['type']);
+        }
 
         $question->update($validated);
 
@@ -117,20 +155,23 @@ class QuestionService
             'choices.*.order' => 'nullable|integer',
         ])->validate();
 
+        $this->ensureTypeMatchesAssessment($assessment, 'mcq');
+        $this->ensureSingleCorrectChoice($validated['choices']);
+
         return DB::transaction(function () use ($validated, $assessment) {
             $question = AssessmentQuestion::create([
                 'assessment_id' => $assessment->id,
                 'type' => $validated['type'],
                 'question_text' => $validated['question_text'],
-                'order' => $validated['order'] ?? null,
+                'order' => $validated['order'] ?? $this->nextOrder($assessment->id),
             ]);
 
-            foreach ($validated['choices'] as $choice) {
+            foreach (array_values($validated['choices']) as $index => $choice) {
                 AssessmentChoice::create([
                     'question_id' => $question->id,
                     'option' => $choice['option'],
                     'is_correct' => $choice['is_correct'],
-                    'order' => $choice['order'] ?? null,
+                    'order' => $choice['order'] ?? $index + 1,
                 ]);
             }
 
@@ -153,19 +194,28 @@ class QuestionService
             'choices' => 'required|array|size:4',
             'choices.*.option' => 'required|string',
             'choices.*.is_correct' => 'required|boolean',
+            'choices.*.order' => 'nullable|integer',
         ])->validate();
+
+        $this->ensureTypeMatchesAssessment($question->assessment, 'mcq');
+        $this->ensureSingleCorrectChoice($validated['choices']);
 
         return DB::transaction(function () use ($validated, $question) {
             $question->update([
                 'type' => $validated['type'],
                 'question_text' => $validated['question_text'],
-                'order' => $validated['order'] ?? null,
+                // keep the question's position unless a new one is given
+                'order' => $validated['order'] ?? $question->order,
             ]);
 
             $question->choices()->delete();
 
-            foreach ($validated['choices'] as $choice) {
-                $question->choices()->create($choice);
+            foreach (array_values($validated['choices']) as $index => $choice) {
+                $question->choices()->create([
+                    'option' => $choice['option'],
+                    'is_correct' => $choice['is_correct'],
+                    'order' => $choice['order'] ?? $index + 1,
+                ]);
             }
 
             return $question->load('choices');
@@ -200,7 +250,11 @@ class QuestionService
 
             foreach ($rows as $index => $row) {
                 try {
-                    if (empty($row['question_text'])) {
+                    // Spreadsheet cells can be numbers, and "0" is a legitimate
+                    // answer — so test for blank strings, never empty().
+                    $isBlank = fn ($value) => $value === null || trim((string) $value) === '';
+
+                    if ($isBlank($row['question_text'] ?? null)) {
                         $errors[] = ['row' => $index + 2, 'error' => 'Question text required'];
                         continue;
                     }
@@ -210,12 +264,25 @@ class QuestionService
                         $row['choice_2'] ?? null,
                         $row['choice_3'] ?? null,
                         $row['choice_4'] ?? null,
-                    ], fn ($c) => !empty($c)));
+                    ], fn ($c) => !$isBlank($c)));
 
                     $type = count($choices) > 0 ? 'mcq' : 'descriptive';
 
+                    // the row's shape must match the assessment's type
+                    $assessmentType = $assessment->type?->slug;
+
+                    if ($assessmentType === 'mcq' && $type !== 'mcq') {
+                        $errors[] = ['row' => $index + 2, 'error' => 'Choices are required in an MCQ assessment'];
+                        continue;
+                    }
+
+                    if ($assessmentType === 'descriptive' && $type !== 'descriptive') {
+                        $errors[] = ['row' => $index + 2, 'error' => 'Choices are not allowed in a descriptive assessment'];
+                        continue;
+                    }
+
                     if (!empty($choices)) {
-                        if (empty($row['correct_choice'])) {
+                        if ($isBlank($row['correct_choice'] ?? null)) {
                             $errors[] = ['row' => $index + 2, 'error' => 'Correct choice required for MCQ'];
                             continue;
                         }

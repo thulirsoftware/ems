@@ -49,7 +49,7 @@ class QuestionTool implements AITool
                     ],
                     'questions' => [
                         'type' => 'ARRAY',
-                        'description' => 'For bulk_create: one entry per question. Omit choice_1..choice_4/correct_choice for a descriptive question; include all of them for an MCQ question.',
+                        'description' => 'For bulk_create: one entry per question. Every row must match the assessment type: for an MCQ assessment include choice_1..choice_4 and correct_choice; for a descriptive assessment omit them.',
                         'items' => [
                             'type' => 'OBJECT',
                             'properties' => [
@@ -74,7 +74,7 @@ class QuestionTool implements AITool
                 'delete — permanently delete a question and its choices. Blocked once the assessment has been attempted.',
                 'create_with_choices — create an MCQ question together with exactly 4 choices in one call.',
                 'update_with_choices — replace an MCQ question\'s text and its full set of 4 choices in one call.',
-                'bulk_create — create many questions at once (descriptive and/or MCQ, mixed freely), appended after the assessment\'s existing questions in order.',
+                'bulk_create — create many questions at once (all of the assessment\'s own type — MCQ rows with choices, or descriptive rows without), appended after the assessment\'s existing questions in order.',
             ],
             'instructions' => [
                 'All question mutations are blocked once any candidate has attempted the parent assessment.',

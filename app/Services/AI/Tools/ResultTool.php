@@ -33,7 +33,7 @@ class ResultTool implements AITool
                     'user_id' => ['type' => 'INTEGER', 'description' => 'Required for answers_for_grading, grade_answer, user_result.'],
                     'question_id' => ['type' => 'INTEGER', 'description' => 'Required for grade_answer.'],
                     'is_correct' => ['type' => 'BOOLEAN', 'description' => 'Required for grade_answer.'],
-                    'batch_id' => ['type' => 'INTEGER', 'description' => 'Required for batch_wise assessments; omit for fixed/flexible.'],
+                    'batch_id' => ['type' => 'INTEGER', 'description' => 'Required for batch_wise assessments. For fixed assessments omit it for the original exam, or pass a re-exam batch id to see that re-exam.'],
                 ],
                 'required' => ['action'],
             ],

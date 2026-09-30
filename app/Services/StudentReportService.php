@@ -172,8 +172,12 @@ class StudentReportService
         $validated = $this->validateFilters($data);
 
         $attempts = $this->scopedAttempts($user->id, $validated)->filter(fn ($attempt) => $attempt->submitted_at !== null);
-        $attemptsById = $attempts->keyBy('id');
         $batches = Batch::whereIn('id', $attempts->pluck('batch_id')->filter()->unique())->get()->keyBy('id');
+
+        // right/wrong per question is only shown once the exam window has
+        // closed for everyone — same rule as StudentAttemptService::result()
+        $attempts = $attempts->filter(fn ($attempt) => $attempt->assessment && results_released($attempt->assessment, $batches->get($attempt->batch_id)));
+        $attemptsById = $attempts->keyBy('id');
 
         $answers = DB::table('assessment_answers')->whereIn('attempt_id', $attempts->pluck('id'))->whereNull('deleted_at')->get();
         $questions = AssessmentQuestion::whereIn('id', $answers->pluck('question_id')->unique())->get()->keyBy('id');

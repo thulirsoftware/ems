@@ -32,7 +32,17 @@ class AssessmentService
         $result = [];
 
         foreach ($assessments as $assessment) {
-            foreach ($batchesByAssessment->get($assessment->id, collect()) as $batch) {
+            $batches = $batchesByAssessment->get($assessment->id, collect());
+
+            // A batch_wise assessment has no batches until the admin adds one —
+            // still list it (with an empty schedule) so it can be found again.
+            if ($batches->isEmpty()) {
+                $result[] = [...$assessment->toArray(), ...batch_schedule_fields($assessment, null)];
+
+                continue;
+            }
+
+            foreach ($batches as $batch) {
                 $result[] = [...$assessment->toArray(), ...batch_schedule_fields($assessment, $batch)];
             }
         }
@@ -66,7 +76,7 @@ class AssessmentService
             }
 
             foreach ($batchesByAssessment->get($assessment->id, collect()) as $batch) {
-                if ($batch->publish_date == $today && $batch->start_time > $nowTime) {
+                if ($batch->publish_date > $today || ($batch->publish_date == $today && $batch->start_time > $nowTime)) {
                     $result[] = [...$assessment->toArray(), ...batch_schedule_fields($assessment, $batch)];
                 }
             }
@@ -144,6 +154,11 @@ class AssessmentService
             ...$this->scheduleRules(required: true),
         ])->validate();
 
+        // negative_marks is NOT NULL (default 0); an explicit null would fail the insert.
+        if (array_key_exists('negative_marks', $validated) && $validated['negative_marks'] === null) {
+            $validated['negative_marks'] = 0;
+        }
+
         if ($validated['scheduling_type'] === Assessment::SCHEDULING_FIXED && $validated['end_time'] <= $validated['start_time']) {
             abort(422, 'end_time must be after start_time');
         }
@@ -206,6 +221,18 @@ class AssessmentService
 
         if ($validated['scheduling_type'] !== $assessment->scheduling_type) {
             abort(422, 'Changing scheduling type is not allowed');
+        }
+
+        if (array_key_exists('negative_marks', $validated) && $validated['negative_marks'] === null) {
+            $validated['negative_marks'] = 0;
+        }
+
+        // Questions are typed after the assessment (MCQ / descriptive), so the
+        // type can only change while there are none.
+        if (isset($validated['assessment_type_id'])
+            && (int) $validated['assessment_type_id'] !== (int) $assessment->assessment_type_id
+            && $assessment->questions()->exists()) {
+            abort(422, 'Remove all questions before changing the assessment type');
         }
 
         if ($assessment->scheduling_type === Assessment::SCHEDULING_FIXED) {
