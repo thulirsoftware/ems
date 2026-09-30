@@ -1,10 +1,10 @@
 import axios from "axios";
 import { useAuthStore } from "../store/authStore";
 
+const isProduction = false;
+
 const http = axios.create({
-    baseURL: import.meta.env.PROD
-        ? "https://seashell-okapi-169452.hostingersite.com/ems/public/api/v1"
-        : "http://127.0.0.1:8000/api/v1",
+    baseURL: isProduction ? "https://seashell-okapi-169452.hostingersite.com/ems/public/api/v1" : "http://127.0.0.1:8000/api/v1",
     withCredentials: true,
 });
 

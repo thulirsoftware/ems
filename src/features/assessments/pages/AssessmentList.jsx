@@ -240,7 +240,7 @@ export default function AssessmentList() {
             <tbody>
               {paginatedData.map((item, index) => (
                 <tr
-                  key={item.scheduling_type === "batch_wise" ? `${item.id}-${item.batch_id}` : item.id}
+                  key={`${item.id}-${item.batch_id ?? "main"}`}
                   className="border-b hover:bg-gray-50 transition"
                 >
                   <td className="py-3 px-3">
