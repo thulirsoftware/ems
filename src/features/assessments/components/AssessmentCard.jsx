@@ -35,8 +35,19 @@ const VARIANTS = {
   },
 };
 
+// A running exam the student already started: either still answerable, or
+// time is over and it only needs submitting.
+function runningOverrides(exam) {
+  if (exam.attempt_status !== "in_progress") return {};
+
+  return exam.answering_closed
+    ? { badge: "PENDING SUBMISSION", badgeClass: "bg-amber-100 text-amber-700", actionLabel: "Time over – Submit" }
+    : { actionLabel: "Continue Exam" };
+}
+
 export default function AssessmentCard({ exam, variant = "today", onAction }) {
-  const v = VARIANTS[variant] ?? VARIANTS.today;
+  const base = VARIANTS[variant] ?? VARIANTS.today;
+  const v = variant === "running" ? { ...base, ...runningOverrides(exam) } : base;
 
   return (
     <div

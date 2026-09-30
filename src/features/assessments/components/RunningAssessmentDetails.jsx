@@ -130,13 +130,26 @@ export default function RunningAssessmentDetails() {
         )}
       </div>
 
+      {exam.attempt_status === "in_progress" && exam.answering_closed && (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+          The exam time is over, so your answers can no longer be changed. Your saved
+          answers are kept — open the exam and submit it to finish.
+        </p>
+      )}
+
       <button
         onClick={startExam}
         disabled={starting}
         className="w-full py-3 rounded-xl font-semibold text-white
         bg-red-600 hover:bg-red-700 transition disabled:opacity-60"
       >
-        {starting ? "Starting..." : "Start Exam Now"}
+        {starting
+          ? "Opening..."
+          : exam.attempt_status === "in_progress"
+            ? exam.answering_closed
+              ? "Time is over – Open & Submit"
+              : "Continue Exam"
+            : "Start Exam Now"}
       </button>
     </section>
   );

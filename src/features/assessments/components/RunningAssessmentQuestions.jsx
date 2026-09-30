@@ -5,7 +5,7 @@ import AssessmentService from "../../../services/assesment.service";
 import ConfirmDialog from "../../../components/common/ConfirmDialog";
 
 export default function RunningAssessmentQuestions() {
-    const { examid, attemptId } = useParams();
+    const { examid } = useParams();
     const navigate = useNavigate();
 
     const [questions, setQuestions] = useState([]);
@@ -16,6 +16,9 @@ export default function RunningAssessmentQuestions() {
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
+    // Time is over: answers are read-only, but the attempt stays open until
+    // the student submits it (e.g. they come back after losing connection).
+    const [answeringClosed, setAnsweringClosed] = useState(false);
 
     // Debounce timers for in-flight text-answer autosaves, keyed by question id.
     const answerTimers = useRef({});
@@ -33,57 +36,17 @@ export default function RunningAssessmentQuestions() {
 
     /* --------------------------------------------------
        CALCULATE REMAINING TIME
-       The backend is the authority on expiry (it re-checks the window on
-       every /answer call regardless of what the client shows), so this is
-       a best-effort display only:
-       - non-flexible assessments: deadline = batch publish_date + end_time,
-         which is available from GetAssessmentById on every load — safe
-         across refreshes.
-       - flexible assessments with a fixed duration: the backend anchors
-         the deadline to the attempt's created_at, but that field is never
-         returned to the client. We anchor a local copy the first time this
-         attempt is opened (in localStorage, keyed by attempt id) so a page
-         refresh doesn't reset the countdown to zero.
-       - flexible assessments without a fixed duration: no countdown.
+       The backend computes seconds_remaining for this attempt (fixed: the
+       batch end time; flexible: start + duration, capped at the end date),
+       so the countdown is correct on any device and independent of this
+       machine's clock. The backend also refuses answers after the deadline
+       regardless of what the client shows.
     -------------------------------------------------- */
     const calculateRemainingTime = (meta) => {
-        if (!meta) return null;
+        if (!meta || meta.seconds_remaining == null) return null;
 
-        let deadlineMs = null;
-
-        if (meta.scheduling_type !== "flexible") {
-            if (!meta.publish_date || !meta.end_time) return null;
-
-            const examEnd = new Date(`${meta.publish_date}T${meta.end_time}`);
-            if (Number.isNaN(examEnd.getTime())) return null;
-
-            deadlineMs = examEnd.getTime();
-        } else if (meta.duration_minutes) {
-            const key = `attempt_start_${attemptId}`;
-            let startedAtMs = Number(localStorage.getItem(key)) || 0;
-            if (!startedAtMs) {
-                startedAtMs = Date.now();
-                localStorage.setItem(key, String(startedAtMs));
-            }
-            deadlineMs = startedAtMs + meta.duration_minutes * 60 * 1000;
-
-            // Mirror the backend's flexible_attempt_deadline cap: the
-            // attempt can never run past the end of the assessment's
-            // allowed date range, even if duration_minutes would carry it
-            // further.
-            if (meta.end_date) {
-                const windowEnd = new Date(`${meta.end_date}T23:59:59`);
-                if (!Number.isNaN(windowEnd.getTime())) {
-                    deadlineMs = Math.min(deadlineMs, windowEnd.getTime());
-                }
-            }
-        } else {
-            return null;
-        }
-
-        deadlineRef.current = deadlineMs;
-        const diff = Math.floor((deadlineMs - Date.now()) / 1000);
-        return diff > 0 ? diff : 0;
+        deadlineRef.current = Date.now() + meta.seconds_remaining * 1000;
+        return meta.seconds_remaining > 0 ? meta.seconds_remaining : 0;
     };
 
     /* --------------------------------------------------
@@ -101,8 +64,25 @@ export default function RunningAssessmentQuestions() {
                 ]);
 
                 if (cancelled) return;
-                setQuestions(Array.isArray(data) ? data : []);
-                setTimeLeft(calculateRemainingTime(meta));
+                const list = Array.isArray(data) ? data : [];
+                setQuestions(list);
+
+                // Restore what was already saved, so a resumed attempt
+                // shows the student's answers instead of a blank sheet.
+                const saved = {};
+                list.forEach((question) => {
+                    if (question.saved_answer != null) saved[question.id] = question.saved_answer;
+                });
+                setAnswers(saved);
+
+                if (meta?.answering_closed) {
+                    // Came back after the deadline: show answers read-only
+                    // and let the student submit — never auto-submit here.
+                    setAnsweringClosed(true);
+                    setTimeLeft(null);
+                } else {
+                    setTimeLeft(calculateRemainingTime(meta));
+                }
             } catch (err) {
                 if (cancelled) return;
                 const message =
@@ -131,6 +111,9 @@ export default function RunningAssessmentQuestions() {
         if (timeLeft === null) return;
 
         if (timeLeft <= 0) {
+            // Lock answering first: if the auto-submit below fails (offline),
+            // the attempt stays in "running" and the student submits later.
+            setAnsweringClosed(true);
             submitExam(true);
             return;
         }
@@ -189,22 +172,18 @@ export default function RunningAssessmentQuestions() {
     const reportSaveError = (err) => {
         if (err.name === "CanceledError" || err.code === "ERR_CANCELED") return;
 
-        const message = err.response?.data?.message;
         const isExpired = err.response?.status === 403;
 
-        toast.error(
-            message ||
-                (isExpired
-                    ? "This assessment is no longer accepting answers."
-                    : "Failed to save your answer.")
-        );
-
-        // The backend has already closed the window — stop letting the
-        // student keep trying and finalize the attempt now rather than
-        // waiting for the client-side timer to catch up.
+        // The backend has closed answering — lock the sheet and let the
+        // student submit what was saved.
         if (isExpired) {
-            submitExam(true);
+            setAnsweringClosed(true);
+            setTimeLeft(null);
+            toast.error("Time is over. Your answers can no longer be changed — please submit.");
+            return;
         }
+
+        toast.error(err.response?.data?.message || "Failed to save your answer.");
     };
 
     /* --------------------------------------------------
@@ -213,6 +192,8 @@ export default function RunningAssessmentQuestions() {
        re-selection can't have its request overtaken by an earlier one.
     -------------------------------------------------- */
     const handleOptionSelect = async (questionId, optionId) => {
+        if (answeringClosed) return;
+
         setAnswers((prev) => ({
             ...prev,
             [questionId]: optionId,
@@ -254,6 +235,8 @@ export default function RunningAssessmentQuestions() {
     };
 
     const handleTextAnswer = (questionId, text) => {
+        if (answeringClosed) return;
+
         setAnswers((prev) => ({
             ...prev,
             [questionId]: text,
@@ -297,9 +280,9 @@ export default function RunningAssessmentQuestions() {
 
         setSubmitting(true);
         try {
-            await flushPendingAnswers();
+            // after the deadline there is nothing left to save
+            if (!answeringClosed) await flushPendingAnswers();
             await AssessmentService.SubmitAssessment(examid);
-            localStorage.removeItem(`attempt_start_${attemptId}`);
             navigate(`/assesments/end/${examid}/result`);
         } catch (err) {
             if (err.response?.status === 400) {
@@ -329,7 +312,7 @@ export default function RunningAssessmentQuestions() {
         );
     }
 
-    const timeExpired = timeLeft !== null && timeLeft <= 0;
+    const timeExpired = answeringClosed || (timeLeft !== null && timeLeft <= 0);
     const isLastQuestion = current === questions.length - 1;
 
     /* --------------------------------------------------
@@ -352,6 +335,13 @@ export default function RunningAssessmentQuestions() {
                 )}
             </div>
 
+            {answeringClosed && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+                    Time is over — your answers can no longer be changed. Review them and
+                    submit to finish the assessment.
+                </div>
+            )}
+
             {/* QUESTION */}
             <div>
                 <p className="font-medium text-gray-800 mb-4">
@@ -366,7 +356,7 @@ export default function RunningAssessmentQuestions() {
 
                             <label
                                 key={c.id}
-                                className={`block border rounded-lg p-3 cursor-pointer
+                                className={`block border rounded-lg p-3 ${answeringClosed ? "cursor-not-allowed opacity-75" : "cursor-pointer"}
             ${answers[q.id] === c.id
                                         ? "bg-blue-100 border-blue-500"
                                         : ""
@@ -377,6 +367,7 @@ export default function RunningAssessmentQuestions() {
                                     type="radio"
                                     className="mr-2"
                                     checked={answers[q.id] === c.id}
+                                    disabled={answeringClosed}
                                     onChange={() =>
                                         handleOptionSelect(q.id, c.id)
                                     }
@@ -395,6 +386,7 @@ export default function RunningAssessmentQuestions() {
                             rows={6}
                             placeholder="Write your answer..."
                             value={answers[q.id] || ""}
+                            disabled={answeringClosed}
                             onChange={(e) =>
                                 handleTextAnswer(q.id, e.target.value)
                             }
