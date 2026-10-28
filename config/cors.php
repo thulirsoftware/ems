@@ -32,7 +32,8 @@ return [
         'http://127.0.0.1:3000',
         'https://seashell-okapi-169452.hostingersite.com',
         'https://ems-admin-demo.netlify.app',
-        'https://ems-student.netlify.app'
+        'https://ems-student.netlify.app',
+        'https://ems-student-demo.netlify.app',
     ],
 
     'allowed_origins_patterns' => [],
